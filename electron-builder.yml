@@ -1,0 +1,77 @@
+# Packaging for the GD-PerformanceShield desktop app.
+#
+# Only the desktop wrapper and the pre-bundled server go into the app; the
+# TypeScript sources and node_modules are already flattened into
+# desktop/build/server.cjs by scripts/build-desktop.mjs, so nothing else is
+# needed at runtime.
+appId: co.gamedistrict.performanceshield
+productName: GD-PerformanceShield
+copyright: Copyright © Game District
+
+directories:
+  output: dist-desktop
+  buildResources: build
+
+files:
+  - desktop/main.cjs
+  - desktop/preload.cjs
+  - desktop/exportNaming.cjs
+  - desktop/server-host.cjs
+  - desktop/build/server.cjs
+  - package.json
+
+# The console's static files live outside the asar archive so the server can
+# read them with plain fs, and so they can be patched without a rebuild.
+extraResources:
+  - from: src/ui
+    to: ui
+    filter:
+      - '**/*'
+
+# Compression: maximum keeps the download small; the app is not launched often
+# enough for decompression time to matter.
+compression: maximum
+asar: true
+
+win:
+  # zip is listed first because it is the only target that does not invoke the
+  # signing toolchain, so it builds on an unsigned machine. nsis and portable
+  # produce executables that electron-builder always tries to sign, which needs
+  # either a certificate or (on Windows) the privilege to create symlinks while
+  # unpacking its signing cache - see docs/SPEC_DEVIATIONS.md.
+  target:
+    - target: zip
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GD-PerformanceShield
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # The app shells out to adb and opens native dialogs; neither needs an
+  # entitlement, but hardened runtime is required for notarization.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: ${productName}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Development

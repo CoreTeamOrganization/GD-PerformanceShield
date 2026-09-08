@@ -1,0 +1,1370 @@
+/* ---------------------------------------------------------------------------
+   The `hidden` attribute must actually hide.
+   ---------------------------------------------------------------------------
+   The browser hides [hidden] with a UA rule, which any author rule setting
+   `display` outrides - and the panels this app toggles (the app dropdown, the
+   revealed options, every step section) are all flex or grid. Without this,
+   `el.hidden = true` silently did nothing: the app dropdown stayed open after a
+   selection, and the progressive disclosure showed every step at once.
+   --------------------------------------------------------------------------- */
+
+[hidden] { display: none !important; }
+
+/* ---------------------------------------------------------------------------
+   Theme
+   ---------------------------------------------------------------------------
+   Light is the base palette so a page with no theme applied is still readable.
+   Dark is applied either explicitly (data-theme="dark") or by the OS preference
+   when the user has chosen "system" - which is why the media query is guarded
+   against an explicit light choice.
+   --------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --panel-2: #eef1f6;
+  --border: #d3dae3;
+  --text: #16202c;
+  --muted: #5a6875;
+  --accent: #1668d6;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+  --device-a: #bc4c00;
+  --device-b: #1668d6;
+  --shadow: 0 1px 2px rgba(16, 32, 48, 0.06);
+  --radius: 10px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232c;
+  --border: #2a323d;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #4f9cf9;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --device-a: #f0883e;
+  --device-b: #58a6ff;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 17px; margin: 0; letter-spacing: -0.2px; }
+.brand .subtitle { color: var(--muted); font-size: 12px; }
+.brand .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); align-self: center;
+}
+
+.status-pill {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.status-pill.connected { color: var(--ok); border-color: var(--ok); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 22px; display: grid; gap: 18px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.panel h2 { margin: 0 0 14px; font-size: 15px; letter-spacing: 0.2px; }
+.panel h3 { margin: 20px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.grid .span2 { grid-column: span 2; }
+
+label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.inline { flex-direction: row; align-items: center; gap: 7px; color: var(--text); font-size: 13px; }
+.required { color: var(--bad); }
+
+input[type="text"], input:not([type]) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+input:focus { outline: none; border-color: var(--accent); }
+
+.checks { display: flex; flex-wrap: wrap; gap: 16px; }
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+button, .button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+button:hover:not(:disabled), .button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #04121f; font-weight: 600; }
+
+.role-badge {
+  font-weight: 700; font-size: 11px; padding: 2px 8px;
+  border-radius: 4px; margin-right: 9px;
+}
+.role-A { background: var(--device-a); color: #1a0d02; }
+.role-B { background: var(--device-b); color: #04121f; }
+.role-extra { background: var(--border); color: var(--muted); }
+
+.stages { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 4px; }
+.stage {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-radius: 6px; font-size: 12.5px;
+  background: var(--panel-2);
+}
+.stage .icon { width: 16px; text-align: center; }
+.stage.ok .icon { color: var(--ok); }
+.stage.running .icon { color: var(--accent); }
+.stage.failed .icon { color: var(--bad); }
+.stage.skipped .icon { color: var(--warn); }
+.stage.pending { opacity: 0.5; }
+.stage .err { color: var(--bad); font-size: 11.5px; margin-left: auto; }
+
+.summary { margin-top: 14px; font-size: 13px; display: grid; gap: 4px; }
+
+.capture-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.clock { margin-left: auto; font-size: 20px; font-variant-numeric: tabular-nums; }
+
+.device-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 16px 0; }
+.device-card {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px;
+}
+.device-card.dead { border-color: var(--bad); }
+.device-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.device-card .value { font-size: 26px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.device-card .meta { color: var(--muted); font-size: 11.5px; display: grid; gap: 2px; margin-top: 6px; }
+
+.chart-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+canvas { width: 100%; display: block; }
+
+.markers { display: flex; flex-wrap: wrap; gap: 8px; }
+.marker-btn { position: relative; padding: 10px 14px; min-width: 118px; text-align: left; }
+.marker-btn .key {
+  position: absolute; top: 4px; right: 6px;
+  font-size: 10px; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 3px; padding: 0 4px;
+}
+.marker-btn.flow { border-left: 3px solid var(--ok); }
+.marker-btn.screen { border-left: 3px solid var(--device-b); }
+.marker-btn.control { border-left: 3px solid var(--warn); }
+
+.event-log {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; max-height: 240px; overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px;
+}
+.event-log .row { display: flex; gap: 10px; padding: 2px 0; }
+.event-log .t { color: var(--muted); min-width: 52px; }
+.event-log .system { color: var(--warn); }
+.event-log .danger { color: var(--bad); font-weight: 600; }
+
+.risk-banner {
+  padding: 14px 16px; border-radius: 8px; margin-bottom: 14px;
+  border: 1px solid var(--border); background: var(--panel-2);
+}
+.risk-banner.critical { border-color: var(--bad); }
+.risk-banner.high { border-color: var(--warn); }
+.risk-banner .score { font-size: 30px; font-weight: 700; }
+
+.finding-row {
+  padding: 9px 12px; border: 1px solid var(--border);
+  border-radius: 7px; margin-bottom: 6px; background: var(--panel-2); font-size: 13px;
+}
+.sev { font-size: 11px; text-transform: uppercase; font-weight: 700; margin-right: 8px; }
+.sev-critical { color: var(--bad); }
+.sev-high { color: var(--warn); }
+.sev-medium { color: var(--accent); }
+.sev-low, .sev-info { color: var(--muted); }
+
+.error-box {
+  border: 1px solid var(--bad); background: rgba(248, 81, 73, 0.08);
+  color: var(--bad); padding: 10px 12px; border-radius: 7px; margin-top: 12px; font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr; }
+  .grid .span2 { grid-column: span 1; }
+}
+
+/* ---------------------------------------------------------------------------
+   Desktop console layout
+   --------------------------------------------------------------------------- */
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+
+.panel h2 .step {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: 8px;
+  border-radius: 50%; background: var(--accent); color: #04121f;
+  font-size: 11px; font-weight: 700;
+}
+
+#setup-form { display: grid; gap: 16px; }
+
+.picker-row { display: grid; gap: 6px; }
+.picker-row > label { font-size: 12px; color: var(--muted); }
+.picker { display: flex; gap: 8px; }
+.picker input { flex: 1; min-width: 0; }
+.picker .browse { white-space: nowrap; }
+
+.hint { margin: 0; font-size: 11.5px; color: var(--muted); }
+.hint code {
+  background: var(--bg); padding: 1px 4px; border-radius: 3px;
+  font-size: 11px; border: 1px solid var(--border);
+}
+
+.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+button.large { padding: 11px 26px; font-size: 14px; }
+
+/* The button and the line explaining what it will do belong together. */
+.run-row { display: grid; gap: 7px; }
+.run-row .hint { max-width: 62ch; line-height: 1.5; }
+
+.report-actions { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+.risk-banner .headline { margin-top: 6px; font-size: 14px; }
+
+.report-table {
+  width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 13px;
+}
+.report-table th, .report-table td {
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border);
+}
+.report-table th {
+  color: var(--muted); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.5px; font-weight: 600;
+}
+
+details.finding {
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--panel-2); margin-bottom: 7px; padding: 10px 12px;
+}
+details.finding summary { cursor: pointer; font-size: 13px; list-style: none; }
+details.finding summary::-webkit-details-marker { display: none; }
+details.finding summary::before { content: '▸ '; color: var(--muted); }
+details.finding[open] summary::before { content: '▾ '; }
+details.finding p { margin: 10px 0 0; font-size: 13px; color: #c9d4de; }
+details.finding p.rec { color: var(--text); }
+ul.evidence, ul.limitations {
+  margin: 10px 0 0; padding-left: 20px; font-size: 12px; color: var(--muted);
+}
+ul.evidence li, ul.limitations li { margin-bottom: 3px; }
+ul.evidence code { color: var(--accent); font-size: 11.5px; }
+
+.error-box.floating { position: sticky; top: 68px; z-index: 20; cursor: pointer; }
+
+/* ---------------------------------------------------------------------------
+   Theme switch and audience switch
+   --------------------------------------------------------------------------- */
+
+.theme-switch, .audience-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.theme-switch button, .audience-switch button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 5px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.theme-switch button + button, .audience-switch button + button {
+  border-left: 1px solid var(--border);
+}
+.theme-switch button:hover, .audience-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed='true'], .audience-switch button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.audience-switch { margin-bottom: 14px; }
+.audience-switch button { padding: 7px 16px; }
+.audience-hint {
+  margin: -6px 0 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Light theme needs panels to read as raised rather than as flat blocks. */
+.panel { box-shadow: var(--shadow); }
+
+/* Lead-view findings are flat cards rather than collapsible detail blocks. */
+.finding.lead {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+  margin-bottom: 10px;
+  padding: 12px 14px;
+}
+.finding.lead .finding-head { margin-bottom: 8px; }
+.finding.lead p { margin: 8px 0 0; font-size: 13px; }
+
+.badge-measured {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--ok);
+  color: var(--panel);
+}
+
+/* ---------------------------------------------------------------------------
+   PDF export chooser
+   --------------------------------------------------------------------------- */
+
+.export-panel {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.export-title { margin: 0; font-size: 14px; font-weight: 600; }
+.export-panel p { margin: 0; }
+
+.export-options { display: flex; flex-direction: column; gap: 8px; }
+.export-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.export-option:hover { border-color: var(--accent); }
+.export-option input { margin-top: 3px; flex: 0 0 auto; }
+.export-option .label { display: flex; flex-direction: column; gap: 2px; }
+.export-option .label strong { font-size: 13.5px; }
+.export-option .label span { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+
+#export-status.ok { color: var(--ok); }
+#export-status.err { color: var(--bad); }
+#export-status { white-space: pre-line; line-height: 1.55; }
+
+/* ---------------------------------------------------------------------------
+   Where the files went
+
+   Paths are shown in full and are selectable: an operator pasting a path into
+   a ticket or a chat message is the normal way these reports get handed over,
+   and truncating the middle of a path would make that impossible.
+   --------------------------------------------------------------------------- */
+
+.output-block {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.file-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 12.5px;
+}
+.file-list .path {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.file-list .what { color: var(--muted); font-size: 11.5px; }
+.file-list .missing { color: var(--bad); font-size: 11.5px; }
+.file-list .folder .path { color: var(--muted); }
+
+#output-status.ok { color: var(--ok); }
+#output-status.err { color: var(--bad); }
+select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+select:focus { outline: none; border-color: var(--accent); }
+select:disabled { opacity: 0.55; }
+
+/* ---------------------------------------------------------------------------
+   Memory timeline — category palette
+   ---------------------------------------------------------------------------
+   Seven bands that must stay distinguishable from each other on both grounds.
+   Native Heap and Graphics carry the strongest colours because they are almost
+   always the two largest, and the two the reader looks for first.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --cat-native:   #2f6fd0;
+  --cat-graphics: #c2610a;
+  --cat-code:     #7048c4;
+  --cat-java:     #17825a;
+  --cat-stack:    #b03a86;
+  --cat-other:    #5a6b80;
+  --cat-system:   #8d99ac;
+}
+
+:root[data-theme='dark'] {
+  --cat-native:   #5b9bf5;
+  --cat-graphics: #f0a154;
+  --cat-code:     #a98bf0;
+  --cat-java:     #46c78d;
+  --cat-stack:    #e57ac0;
+  --cat-other:    #7f8fa6;
+  --cat-system:   #59657a;
+}
+
+/* ---- device timeline panel ---- */
+
+.device-timeline {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.timeline-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; }
+.timeline-now { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.timeline-now strong { font-size: 17px; color: var(--text); }
+
+/* RAM usage bar — how close the app is to the hardware limit */
+.ram-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.ram-bar span { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
+.ram-bar.warn span { background: var(--warn); }
+.ram-bar.crit span { background: var(--bad); }
+
+.timeline-canvas { width: 100%; height: 240px; display: block; cursor: crosshair; }
+
+/* Legend / readout, always sorted largest first */
+.cat-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 4px 14px; }
+.cat-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.cat-swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+.cat-name { color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat-value { color: var(--text); font-weight: 600; }
+.cat-share { color: var(--muted); min-width: 34px; text-align: right; }
+
+.readout-at {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+
+.view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.view-toggle button {
+  background: transparent; border: none; border-radius: 0;
+  padding: 4px 11px; font-size: 11.5px; color: var(--muted); cursor: pointer;
+}
+.view-toggle button + button { border-left: 1px solid var(--border); }
+.view-toggle button[aria-pressed='true'] { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* ---------------------------------------------------------------------------
+   Setup form - progressive disclosure
+   ---------------------------------------------------------------------------
+   The panel reveals one decision at a time, so a block only appears once the
+   decision above it has been made.
+   --------------------------------------------------------------------------- */
+
+#setup-form { display: grid; gap: 14px; }
+#analysis-options { display: grid; gap: 14px; }
+
+.opt-block {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  padding: 10px 13px;
+  background: var(--panel-2);
+  display: grid;
+  gap: 6px;
+}
+.opt-head { display: flex; align-items: center; gap: 9px; }
+.opt-head strong { font-size: 13px; }
+.opt-tag {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #04121f;
+  font-weight: 700;
+}
+.opt-block p { margin: 0; line-height: 1.5; }
+
+/* A hint doubles as the validation readout for the field above it. */
+.hint.ok { color: var(--ok); }
+.hint.err { color: var(--bad); }
+.hint.busy { color: var(--muted); font-style: italic; }
+
+/* ---------------------------------------------------------------------------
+   App dropdown
+   ---------------------------------------------------------------------------
+   Collapsed to one control by default; it opens onto a search box and the list,
+   which is the only way to make a few hundred packages selectable.
+   --------------------------------------------------------------------------- */
+
+.combo { display: grid; gap: 6px; }
+.combo-button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.combo-button .combo-caret { color: var(--muted); font-size: 10px; }
+.combo-button[aria-expanded='true'] { border-color: var(--accent); }
+#appToggleLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#appToggleLabel .pkg { color: var(--muted); font-size: 11.5px; margin-left: 7px; }
+
+.combo-popup { display: grid; gap: 6px; }
+
+/* ---------------------------------------------------------------------------
+   Installed-app list
+   ---------------------------------------------------------------------------
+   A custom listbox, not a <select>: options cannot carry two lines of markup,
+   and re-clicking a selected option fires no event, which made clicking appear
+   to do nothing.
+   --------------------------------------------------------------------------- */
+
+.app-list {
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+.app-list:focus { outline: none; border-color: var(--accent); }
+
+.app-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 11px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line-soft, var(--border));
+}
+.app-item:last-child { border-bottom: none; }
+.app-item:hover { background: var(--panel-2); }
+
+.app-item[aria-selected='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+.app-item[aria-selected='true'] .app-pkg,
+.app-item[aria-selected='true'] .app-ver,
+.app-item[aria-selected='true'] .app-flag { color: rgba(255, 255, 255, 0.82); }
+
+.app-name { font-weight: 600; font-size: 13.5px; }
+.app-pkg {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.app-ver { color: var(--muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+.app-flag {
+  color: var(--warn);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.app-empty { padding: 14px 12px; color: var(--muted); font-size: 12.5px; }
+
+/* A name still being read off the device, and one that had to be guessed. */
+.app-name.pending {
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.app-name.derived { font-style: italic; }
+
+/* ---------------------------------------------------------------------------
+   Memory event details
+   --------------------------------------------------------------------------- */
+
+.event-detail {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.event-detail p { margin: 0; }
+
+.event-head { display: flex; align-items: baseline; gap: 10px; }
+.event-head strong { font-size: 13.5px; }
+.event-delta { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; }
+.event-delta.up { color: var(--warn); }
+.event-delta.down { color: var(--ok); }
+
+.event-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.event-close:hover { color: var(--text); }
+
+.event-breakdown { display: flex; flex-direction: column; gap: 3px; }
+.event-breakdown .ev-head,
+.event-logs .ev-head {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.event-logs {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11.5px;
+}
+.event-logs .row { display: flex; gap: 9px; padding: 1px 0; color: var(--ink-soft, var(--muted)); }
+.event-logs .t { color: var(--muted); min-width: 44px; }
+
+/* ---------------------------------------------------------------------------
+   Drilling into a category
+   ---------------------------------------------------------------------------
+   "Graphics grew 137 MB" is where the question starts, not where it ends. An
+   expandable row opens onto what is inside that category, ranked by how much it
+   moved, and each of those opens onto what it means.
+   --------------------------------------------------------------------------- */
+
+.cat-rows { display: flex; flex-direction: column; gap: 2px; }
+
+.cat-row.expandable {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 2px 5px;
+  margin-left: -5px;
+}
+.cat-row.expandable:hover { background: var(--panel-2); }
+.cat-row.expandable:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.cat-caret {
+  width: 9px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 9px;
+  transition: transform 120ms ease;
+}
+.cat-row.open .cat-caret { transform: rotate(90deg); }
+.cat-row.open .cat-name { color: var(--text); font-weight: 600; }
+
+.cat-drill {
+  margin: 4px 0 8px 16px;
+  border-left: 2px solid var(--border);
+  padding-left: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.drill-head {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+/*
+ * Seven rows visible, the rest scrolled. A real process has dozens of mappings;
+ * showing them all would push the log and the caveat off the screen, and
+ * showing only the top few would hide the one that matters.
+ */
+.drill-list {
+  max-height: 182px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.drill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.drill-row:last-child { border-bottom: none; }
+.drill-row:hover { background: var(--panel-2); }
+.drill-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.drill-row.open { background: var(--panel-2); font-weight: 600; }
+
+.drill-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11.5px;
+}
+.drill-size { color: var(--muted); min-width: 62px; text-align: right; }
+.drill-delta { min-width: 62px; text-align: right; color: var(--muted); }
+.drill-delta.up { color: var(--bad); }
+.drill-delta.down { color: var(--ok); }
+
+.drill-detail {
+  padding: 8px 11px 10px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.drill-detail p { margin: 0 0 5px; }
+.drill-detail p:last-child { margin-bottom: 0; }
+
+/* The engine's own numbers lead, and are marked as a different measurement. */
+.drill-section.engine .drill-head { color: var(--accent); }
+.drill-section.engine .drill-list { border-color: var(--accent); }
+.drill-note code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  background: var(--panel-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.drill-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.event-caveat {
+  font-size: 11.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------
+   Repeat mode and session comparison
+   ---------------------------------------------------------------------------
+   Two sessions can only be compared where they marked the same things, so the
+   checklist during capture and the comparison afterwards are two halves of one
+   feature.
+   --------------------------------------------------------------------------- */
+
+.repeat-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.inline-label { font-size: 12px; color: var(--muted); flex-direction: row; }
+.repeat-bar select { flex: 0 1 320px; }
+
+.repeat-route {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+  max-height: 168px;
+  overflow-y: auto;
+  display: grid;
+  gap: 2px;
+}
+.repeat-step {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 2px 0;
+}
+.repeat-step .tick { width: 12px; flex: 0 0 auto; }
+.repeat-step.done { color: var(--ok); text-decoration: line-through; }
+.repeat-step.next { color: var(--text); font-weight: 600; }
+.repeat-step.next .tick { color: var(--accent); }
+
+.cmp-headline {
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 11px 14px;
+  border-radius: 7px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  margin-bottom: 12px;
+}
+.cmp-headline.blocked { border-left-color: var(--bad); }
+
+.cmp-gates { display: grid; gap: 5px; margin-bottom: 12px; }
+.gate { margin: 0; font-size: 12px; line-height: 1.5; }
+.gate.block { color: var(--bad); font-weight: 600; }
+.gate.warn { color: var(--warn); }
+.gate.note { color: var(--muted); }
+
+.cmp-coverage, .cmp-floor {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.cmp-table th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.cmp-table .num { text-align: right; }
+.cmp-table tr:last-child td { border-bottom: none; }
+.cmp-note td {
+  font-size: 11.5px;
+  color: var(--muted);
+  padding-top: 0;
+  line-height: 1.45;
+}
+
+.cmp-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cmp-chip.ok { background: var(--ok); color: #fff; }
+.cmp-chip.bad { background: var(--bad); color: #fff; }
+
+/* ---------------------------------------------------------------------------
+   Live frame rate, heat and battery
+   ---------------------------------------------------------------------------
+   Shown on the device card while the tester plays. Fixed widths, because these
+   update every few seconds and a card that reflows as the digits change is
+   harder to read than one that holds its shape.
+   --------------------------------------------------------------------------- */
+
+.live-stats { display: flex; gap: 6px; margin: 6px 0 2px; }
+.live-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+}
+.ls-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.ls-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.live-stat.ok .ls-value { color: var(--ok); }
+.live-stat.warn .ls-value { color: var(--warn); }
+.live-stat.bad .ls-value { color: var(--bad); }
+.live-stat.charging .ls-value { color: var(--accent); }
+
+.throttle-flag {
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #fff;
+  background: var(--bad);
+  border-radius: 4px;
+  padding: 2px 7px;
+  text-align: center;
+}
+
+/* Frame rate beside the curve, in the timeline header. */
+.panel-fps {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  margin-right: 12px;
+}
+.panel-fps .unit { font-size: 10px; font-weight: 400; color: var(--muted); }
+.panel-fps .sep { color: var(--border); font-weight: 400; }
+.panel-fps.ok { color: var(--ok); }
+.panel-fps.warn { color: var(--warn); }
+.panel-fps.bad { color: var(--bad); }
+.panel-fps .thr {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #fff;
+  background: var(--bad);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* Said plainly rather than left as an empty dash the reader has to interpret. */
+.stat-missing {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-style: italic;
+  text-align: center;
+}
+
+/* Why frame rate is missing, expandable rather than a bare dash. */
+.stat-why {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.stat-why summary {
+  cursor: pointer;
+  font-style: italic;
+  text-align: center;
+  list-style: none;
+}
+.stat-why summary::-webkit-details-marker { display: none; }
+.stat-why summary::after { content: ' 9'; }
+.stat-why[open] summary::after { content: ' A'; }
+.stat-why ul {
+  margin: 5px 0 0;
+  padding-left: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+.stat-why li { margin-bottom: 3px; }
+
+/*
+ * Reset. Present but quiet: it is destructive of the run in progress, so it
+ * should not compete with Analyze for attention, and it should not be a shape
+ * the eye lands on by accident.
+ */
+.reset-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  color: var(--muted);
+}
+.reset-btn:hover:not(:disabled) {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+/* An offer to compare, shown only when there is something to compare with. */
+.compare-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 7px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+}
+.compare-offer .muted { display: block; margin-top: 1px; }
+
+/* The one caveat that applies to a whole table, said once above it. */
+.cmp-caveat {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+  font-weight: 600;
+  padding: 7px 11px;
+  border-left: 3px solid var(--warn);
+  background: var(--panel-2);
+  border-radius: 5px;
+}
+
+/*
+ * A panel that was opened from somewhere else needs a way back.
+ *
+ * The comparison panel is reached from an offer on the first screen. Without a
+ * close control the two sat on screen together, the offer restating what the
+ * open panel already showed.
+ */
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.panel-head h2 {
+  margin: 0;
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The summary snapshot.
+ *
+ * The console's Summary view and the exported PDF are the same page in two
+ * media, so the shapes match: status hero, four numbers, the worst problem
+ * beside how it played, then the context and one line of conclusion. Colour is
+ * carried by a single tone class per block, which the theme tokens resolve, so
+ * the panel reads correctly in both light and dark.
+ * ------------------------------------------------------------------------- */
+.snap-hero, .snap-kpi, .snap-block { --tone: var(--muted); }
+.tone-good { --tone: var(--ok); }
+.tone-watch { --tone: var(--warn); }
+.tone-bad { --tone: var(--bad); }
+.tone-unknown { --tone: var(--muted); }
+
+.snap-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--tone); margin-right: 7px;
+}
+
+.snap-hero {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  border: 1px solid var(--border); border-left: 5px solid var(--tone);
+  border-radius: var(--radius); background: var(--panel-2);
+  padding: 16px 18px; margin-bottom: 12px;
+}
+.snap-hero-main { flex: 1 1 260px; }
+.snap-status { font-size: 20px; font-weight: 700; color: var(--tone); letter-spacing: -0.2px; }
+.snap-concern { margin-top: 4px; font-size: 14px; }
+.snap-score-label {
+  margin-top: 12px; font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+  text-transform: uppercase; color: var(--muted);
+}
+.snap-score { font-size: 46px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.snap-score span { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+
+/* Deliberately colourless: a tinted confidence box reads as a second risk. */
+.snap-conf {
+  flex: 0 0 165px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px;
+}
+.snap-conf-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.snap-conf-value { font-size: 27px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.snap-conf-bar { height: 5px; border-radius: 3px; background: var(--panel-2); margin: 5px 0 6px; }
+.snap-conf-bar span { display: block; height: 100%; border-radius: 3px; background: var(--muted); }
+
+.snap-alert {
+  border: 1px solid var(--bad); border-left-width: 4px; border-radius: 7px;
+  padding: 9px 13px; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--bad);
+}
+
+.snap-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; margin-bottom: 12px;
+}
+.snap-kpi {
+  border: 1px solid var(--border); border-top: 3px solid var(--tone);
+  border-radius: 8px; padding: 11px 13px 12px; background: var(--panel);
+}
+.snap-kpi-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.snap-kpi-value {
+  font-size: 28px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.snap-kpi-value.none { color: var(--muted); }
+.snap-kpi-caption { font-size: 12px; color: var(--muted); }
+.snap-kpi-status { margin-top: 8px; font-size: 12.5px; font-weight: 600; color: var(--tone); }
+
+.snap-split { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-bottom: 12px; }
+@media (max-width: 720px) { .snap-split { grid-template-columns: 1fr; } }
+.snap-block {
+  border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px 14px;
+  background: var(--panel);
+}
+.snap-block h3 {
+  margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+  text-transform: uppercase; color: var(--muted);
+}
+.snap-issue { border-left: 5px solid var(--tone); }
+.snap-issue-headline { font-size: 32px; font-weight: 700; line-height: 1; color: var(--tone); }
+.snap-issue-kind { font-size: 16px; font-weight: 600; margin-top: 4px; }
+.snap-issue-detail { font-size: 13px; color: var(--muted); }
+.snap-priority {
+  display: inline-block; margin-top: 10px; padding: 4px 9px; border-radius: 4px;
+  background: var(--tone); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+}
+.snap-facts { list-style: none; margin: 0; padding: 0; }
+.snap-facts li {
+  font-size: 15px; font-weight: 600; padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.snap-facts li:last-child { border-bottom: 0; }
+.snap-verdict { margin-top: 9px; font-size: 14px; color: var(--tone); }
+
+.snap-context { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.snap-context div {
+  flex: 1 1 220px; background: var(--panel-2); border-radius: 7px; padding: 9px 13px;
+  font-size: 13px;
+}
+.snap-context span {
+  display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.snap-bottom { border-top: 2px solid var(--text); padding-top: 10px; }
+.snap-bottom span {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.snap-bottom p { margin: 4px 0 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
+
+.snap-foot { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+/*
+ * Every heading in the snapshot is ruled, exactly as the printed page rules
+ * them. Small-caps grey type on its own is a weak boundary between one block
+ * and the next; a hairline under each label is what makes a grid of numbers
+ * scan as a dashboard. Last in the file so it settles the question for every
+ * heading rather than being undone by a block-specific rule below it.
+ */
+.snap-score-label, .snap-conf-label, .snap-kpi-label,
+.snap-block h3, .snap-context span, .snap-bottom span {
+  display: block;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+  margin-bottom: 5px;
+}
+
+/*
+ * Columns ruled like rows, the same as the printed report.
+ *
+ * A table where only the rows are ruled makes a reader track across open space
+ * to keep a figure with its heading, and the wider the table the further they
+ * track. The rule costs nothing and removes the guesswork.
+ */
+.report-table th, .report-table td { border-right: 1px solid var(--border); }
+.report-table th:last-child, .report-table td:last-child { border-right: 0; }
+
+/*
+ * The frame-rate curve, in its own section on the same time axis.
+ *
+ * The same height as the memory chart, and the same width, so the two can be
+ * read against each other: they share a clock, and a drop here that lines up
+ * with a jump there is one event seen twice. It was deliberately half-height
+ * while it was a strip inside the memory panel - which made a 10 fps dip look
+ * like a smaller thing than the memory jump beside it, purely because it had
+ * half the pixels to fall through.
+ */
+.fps-canvas {
+  display: block;
+  width: 100%;
+  height: 240px;
+  cursor: crosshair;
+}
+
+/* The clicked drop's figures: label left, value right, one per line. */
+.fps-rows {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 6px;
+}
+.fps-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+.fps-row:last-child { border-bottom: none; }
+.fps-row strong { font-variant-numeric: tabular-nums; }
+
+/*
+ * The verdict on a frame-rate drop, in the panel that opens when one is clicked.
+ *
+ * Given a tinted band and a left rule rather than being another paragraph: it
+ * is the one line the operator opened the panel for, and the figures above it
+ * are the evidence. The tone carries how much the live view can actually
+ * support - grey where it does not know, which is a state this deliberately
+ * shows rather than hides.
+ */
+.fps-cause {
+  margin: 8px 0 6px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--muted);
+  border-radius: 4px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.fps-cause.good { border-left-color: var(--ok); }
+.fps-cause.bad { border-left-color: var(--bad); }
+.fps-cause.watch { border-left-color: var(--warn); }
+.fps-cause.flat { border-left-color: var(--muted); }
+.fps-cause .muted { margin-top: 2px; }
+
+/*
+ * The letter tying a frame-rate drop to the memory jump beside it.
+ *
+ * Drawn the same way as the badge on the memory chart, because it refers to
+ * that exact badge: the reader is being told "this is B", and the point is only
+ * made if it looks like the B they can see above.
+ */
+.shared-letter {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin: 0 2px;
+  border-radius: 3px;
+  background: var(--text);
+  color: var(--panel);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}

@@ -1,0 +1,51 @@
+{
+  "name": "gd-performance-shield",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unity mobile performance and stability analyzer - static analysis + on-device profiling + correlated risk reporting",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "bin": {
+    "gdshield": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-ui.mjs",
+    "dev": "tsx src/cli/index.ts",
+    "gdshield": "tsx src/cli/index.ts",
+    "serve": "tsx src/cli/index.ts serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:exe": "node scripts/build-exe.mjs",
+    "gui": "tsx src/cli/index.ts gui",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "desktop": "npm run build:desktop && node scripts/run-desktop.mjs",
+    "dist:win": "npm run build:desktop && electron-builder --win --config electron-builder.yml",
+    "dist:mac": "npm run build:desktop && electron-builder --mac --config electron-builder.yml",
+    "dist:linux": "npm run build:desktop && electron-builder --linux --config electron-builder.yml"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.0.4",
+    "@fastify/websocket": "^11.0.2",
+    "commander": "^13.1.0",
+    "fastify": "^5.2.1",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "main": "desktop/main.cjs",
+  "author": {
+    "name": "Game District"
+  }
+}

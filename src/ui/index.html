@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GD-PerformanceShield</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // Applied before the stylesheet paints, so switching themes never flashes.
+      // 'system' is resolved here rather than in CSS so the canvas chart can read
+      // the same resolved tokens the rest of the page uses.
+      (function () {
+        try {
+          var stored = localStorage.getItem('oom.theme') || 'system';
+          var dark =
+            stored === 'dark' ||
+            (stored === 'system' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <h1>GD-PerformanceShield</h1>
+        <span class="subtitle">Unity Mobile Memory Risk Analyzer</span>
+      </div>
+      <div class="topbar-right">
+        <span id="env-note" class="muted small"></span>
+        <div class="theme-switch" role="group" aria-label="Colour theme">
+          <button type="button" data-theme-choice="light" title="Light">&#9788;</button>
+          <button type="button" data-theme-choice="dark" title="Dark">&#9789;</button>
+          <button type="button" data-theme-choice="system" title="Match system">&#9881;</button>
+        </div>
+        <button type="button" id="reset-all" class="reset-btn" title="Stop anything running and start over">
+          Reset
+        </button>
+        <span class="status-pill" id="connection">idle</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Step 1 — inputs                                                   -->
+      <!-- ---------------------------------------------------------------- -->
+      <section class="panel" id="setup-panel">
+        <h2><span class="step">1</span> Choose what to analyze</h2>
+
+        <form id="setup-form">
+          <!--
+            Progressive disclosure, in the order the operator actually decides:
+            device, then app, then what to analyze.
+
+            Each step is *absent* until the one before it is answered, not
+            present-but-disabled. A fresh console shows one field. Choosing a
+            device reveals the app picker; choosing an app reveals the options
+            and the Analyze button. Everything below the device therefore starts
+            `hidden` in this markup rather than being hidden by script after
+            load, so the first paint is already correct and a reset that reloads
+            the page cannot flash a step the operator has not reached.
+          -->
+          <div class="picker-row">
+            <label for="deviceSelect">Device</label>
+            <div class="picker">
+              <select id="deviceSelect" name="deviceSerial"></select>
+              <button type="button" id="refresh-devices">Refresh</button>
+            </div>
+            <p class="hint" id="device-hint">Looking for connected devices&hellip;</p>
+          </div>
+
+          <div class="picker-row" id="game-row" hidden>
+            <label for="appToggle">Game</label>
+            <!--
+              A dropdown that opens onto a search box and a two-line list. A
+              native <select> cannot do either: an <option> holds one line of
+              text, and re-picking the selected option fires no change event.
+            -->
+            <div class="combo" id="appCombo">
+              <div class="picker">
+                <button
+                  type="button"
+                  class="combo-button"
+                  id="appToggle"
+                  aria-expanded="false"
+                  aria-haspopup="listbox"
+                  disabled
+                >
+                  <span id="appToggleLabel">Select an installed app&hellip;</span>
+                  <span class="combo-caret" aria-hidden="true">&#9662;</span>
+                </button>
+                <button type="button" id="refresh-apps" disabled>Refresh</button>
+              </div>
+              <div class="combo-popup" id="appPopup" hidden>
+                <input
+                  id="appSearch"
+                  type="search"
+                  placeholder="Search by name or package&hellip;"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div class="app-list" id="appList" role="listbox" tabindex="0" aria-label="Installed apps"></div>
+              </div>
+            </div>
+            <input type="hidden" id="appSelect" name="packageName" value="" />
+            <p class="hint" id="app-hint"></p>
+          </div>
+
+          <!-- Everything from here down appears once a game is chosen. -->
+          <div id="analysis-options" hidden>
+            <div class="opt-block">
+              <div class="opt-head">
+                <strong>Analyze APK</strong>
+                <span class="opt-tag">always on</span>
+              </div>
+              <p class="muted small">
+                Launches the game on the device and records memory while you play, then grades the
+                peak against what one app may use on that hardware.
+              </p>
+              <label class="inline">
+                <input type="checkbox" name="killBackgroundApps" checked />
+                Close other apps first (measure on a quiet phone)
+              </label>
+              <p class="hint">
+                Frees memory before the game starts, so the peak is what this build needs rather
+                than what was left over. The home screen and the keyboard are left running, and the
+                report records how much was freed. Uncheck to measure the device as a player would
+                actually have it.
+              </p>
+              <label class="inline">
+                <input type="checkbox" name="freshState" />
+                Clear app data before launch (cold-launch test)
+              </label>
+            </div>
+
+            <!--
+              The Unity project folder, hidden for now.
+              Both this row and the code-options block below are revealed by the
+              single `projectAnalysis` flag - in src/core/features.ts for the
+              server, mirrored in app.js for the console. The markup stays so
+              turning it back on is a value change rather than a rewrite.
+            -->
+            <div class="picker-row" id="project-folder-row" hidden>
+              <label for="projectPath">Unity project folder <span class="muted">(optional)</span></label>
+              <div class="picker">
+                <input id="projectPath" name="projectPath" placeholder="C:\path\to\UnityProject" spellcheck="false" />
+                <button type="button" class="browse" data-target="project">Browse&hellip;</button>
+              </div>
+              <p class="hint" id="project-hint">
+                Add it to trace a measured spike back to the asset or the line of code causing it.
+                Leave it empty to profile the running app alone.
+              </p>
+            </div>
+
+            <!-- Only once the folder above is confirmed to be a Unity project. -->
+            <div class="opt-block" id="code-options" hidden>
+              <div class="opt-head">
+                <strong>Analyze code and assets</strong>
+                <span class="opt-tag">always on</span>
+              </div>
+              <p class="muted small">
+                Assets, import settings, scenes and C# are read from the project and correlated with
+                what the device measured.
+              </p>
+              <p class="mono small" id="code-facts"></p>
+            </div>
+
+            <div class="two-up">
+              <div class="picker-row">
+                <label for="gameName">Game name</label>
+                <input id="gameName" name="gameName" placeholder="Filled in from the app" spellcheck="false" />
+              </div>
+              <div class="picker-row">
+                <label for="studio">Studio <span class="muted">(optional)</span></label>
+                <input id="studio" name="studio" placeholder="Studio name" spellcheck="false" />
+              </div>
+            </div>
+          </div>
+
+          <!--
+            Only appears once there are two recorded sessions to compare. Before
+            that it would be an offer the tool cannot honour, and the panel it
+            points at would be empty.
+          -->
+          <div class="compare-offer" id="compare-offer" hidden>
+            <div>
+              <strong id="compare-offer-count"></strong>
+              <span class="muted">Compare two of them to see whether a change helped.</span>
+            </div>
+            <button type="button" id="goto-compare">Compare sessions</button>
+          </div>
+
+          <div class="run-row" id="run-row" hidden>
+            <div class="actions">
+              <button type="submit" class="primary large" id="analyze-btn" disabled>Analyze</button>
+            </div>
+            <p class="hint" id="run-summary"></p>
+          </div>
+        </form>
+      </section>
+
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Step 2 — progress                                                 -->
+      <!-- ---------------------------------------------------------------- -->
+      <section class="panel" id="progress-panel" hidden>
+        <h2><span class="step">2</span> Analysis progress</h2>
+        <div id="analysis-id" class="mono muted small"></div>
+        <ul id="stages" class="stages"></ul>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Step 3 — live capture (device mode only)                          -->
+      <!-- ---------------------------------------------------------------- -->
+      <section class="panel" id="capture-panel" hidden>
+        <h2><span class="step">3</span> Play the game</h2>
+        <p class="muted small">
+          The tool records every measurement automatically. Press a marker whenever the game
+          <em>reaches</em> a state — not while it is still loading into it.
+        </p>
+
+        <div class="capture-controls">
+          <button id="start-capture" class="primary">Launch &amp; start recording</button>
+          <button id="stop-capture" disabled>Stop recording</button>
+          <button id="finish" disabled>Finish &amp; build report</button>
+          <span id="session-clock" class="clock mono">00:00</span>
+        </div>
+
+        <div id="device-cards" class="device-cards"></div>
+
+        <div class="timeline-head" style="margin-bottom:-4px">
+          <h3 style="margin:0">Memory timeline</h3>
+          <div class="view-toggle" role="group" aria-label="Timeline view">
+            <button type="button" data-view="breakdown" aria-pressed="true">Breakdown</button>
+            <button type="button" data-view="total" aria-pressed="false">Total</button>
+          </div>
+        </div>
+        <p class="muted small" id="timeline-hint" style="margin:0">
+          Stacked by where the memory actually is. Hover the chart to see what was holding the most
+          at that instant.
+        </p>
+
+        <div id="timelines"></div>
+
+        <!--
+          Frame rate is its own section, not a strip inside the memory panel.
+          It is a different measurement of a different subsystem, and burying it
+          under the memory heading made it read as a memory statistic. It stays
+          directly below, on the same time axis, because a drop here that lines
+          up with a jump there is one event seen twice - adjacency is what makes
+          that visible, and nesting was never what did it.
+        -->
+        <div class="timeline-head" style="margin-bottom:-4px">
+          <h3 style="margin:0">Frame rate</h3>
+        </div>
+        <p class="muted small" style="margin:0">
+          Frames per second, one sample a second, from the compositor. Click anywhere on the curve
+          for what was happening at that moment.
+        </p>
+
+        <div id="fps-timelines"></div>
+
+        <h3>Event markers</h3>
+        <!--
+          Repeat mode. A comparison joins two sessions by marked screen, so two
+          runs are only comparable to the extent they marked the same things.
+          This turns a previous run's route into a checklist, which is what makes
+          the comparison reliable by construction rather than by luck.
+        -->
+        <div class="repeat-bar">
+          <label for="repeatSession" class="inline-label">Repeat a previous session</label>
+          <select id="repeatSession"><option value="">Not repeating — free play</option></select>
+          <span id="repeat-progress" class="muted small"></span>
+        </div>
+        <ol id="repeat-route" class="repeat-route" hidden></ol>
+
+        <div id="markers" class="markers"></div>
+
+        <h3>Session log</h3>
+        <div id="event-log" class="event-log"></div>
+      </section>
+
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Step 4 — report                                                   -->
+      <!-- ---------------------------------------------------------------- -->
+      <section class="panel" id="report-panel" hidden>
+        <h2><span class="step">4</span> Report</h2>
+        <div class="audience-switch" id="audience-switch" role="group" aria-label="Report detail level"></div>
+        <div id="report-body"></div>
+        <!--
+          Where the files are is part of the report, not a detail.
+          Operators reported exporting and then not knowing whether anything had
+          been written, so the paths are on screen from the moment the run
+          finishes rather than only inside a transient status line.
+        -->
+        <div class="output-block" id="output-block" hidden>
+          <p class="export-title">Saved on this machine</p>
+          <p class="muted small" id="output-note">
+            All three Markdown cuts and <code>report.json</code> are written to this session's
+            folder automatically when the run finishes - no export needed, and nothing to press.
+            A PDF is an extra copy for sending to someone who does not have this tool.
+          </p>
+          <ul class="file-list" id="output-files"></ul>
+          <div class="actions">
+            <button type="button" id="output-reveal">Show files</button>
+            <span id="output-status" class="muted small"></span>
+          </div>
+        </div>
+
+        <div class="actions report-actions">
+          <button type="button" id="export-pdf" class="primary">Export PDF…</button>
+          <button type="button" id="reveal">Open report folder</button>
+          <a id="report-md" class="button" target="_blank" rel="noopener">View report.md</a>
+          <a id="report-json" class="button" target="_blank" rel="noopener">View report.json</a>
+          <button type="button" id="new-analysis">Start another analysis</button>
+        </div>
+
+        <div class="export-panel" id="export-panel" hidden>
+          <p class="export-title">Which reports do you want to send?</p>
+          <p class="muted small">
+            Each is a standalone PDF written for a different reader. Pick as many as you need —
+            they are self-contained, so whoever receives one does not need this tool.
+          </p>
+          <p class="muted small">
+            You will be asked for a folder; it opens on this session's own
+            <code>reports</code> folder, which is where the Markdown and JSON already are.
+          </p>
+          <div id="export-options" class="export-options"></div>
+          <div class="actions">
+            <button type="button" id="export-confirm" class="primary">Export</button>
+            <button type="button" id="export-cancel">Cancel</button>
+          </div>
+          <p id="export-status" class="muted small"></p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Compare two recorded sessions                                     -->
+      <!-- ---------------------------------------------------------------- -->
+      <section class="panel" id="compare-panel" hidden>
+        <!--
+          The heading carries a close button, because this panel is opened from
+          an offer on the first screen and there was no way back: once it was on
+          screen it stayed, and the offer that opened it sat directly above it
+          saying the same thing.
+        -->
+        <div class="panel-head">
+          <h2>Compare sessions</h2>
+          <button type="button" id="close-compare" class="icon-btn" title="Close comparison" aria-label="Close comparison">&times;</button>
+        </div>
+        <p class="muted small">
+          Two recorded gameplay sessions, joined <strong>by marked screen</strong> rather than by
+          elapsed time — sixty seconds into one playthrough is a different point in the game from
+          sixty seconds into another.
+        </p>
+
+        <div class="two-up">
+          <div class="picker-row">
+            <label for="compareBefore">Earlier run</label>
+            <select id="compareBefore"></select>
+          </div>
+          <div class="picker-row">
+            <label for="compareAfter">Later run</label>
+            <select id="compareAfter"></select>
+          </div>
+        </div>
+
+        <!--
+          Asked rather than measured: the frame rate a build aims for is a
+          project setting, and it has to be per-session. Comparing a 30 fps build
+          against a 60 fps one by subtracting their measured rates would report a
+          30 fps regression where the target simply changed.
+        -->
+        <div class="two-up">
+          <div class="picker-row">
+            <label for="targetFpsBefore">Target frame rate &mdash; earlier run</label>
+            <input id="targetFpsBefore" type="number" min="1" max="240" step="1" placeholder="e.g. 30" />
+          </div>
+          <div class="picker-row">
+            <label for="targetFpsAfter">Target frame rate &mdash; later run</label>
+            <input id="targetFpsAfter" type="number" min="1" max="240" step="1" placeholder="e.g. 60" />
+          </div>
+        </div>
+        <p class="hint" id="target-fps-hint">
+          What each build was aiming for. Needed because the two runs can have different targets, in
+          which case their measured rates cannot be compared directly &mdash; the report compares
+          each against its own target instead. Leave blank if a run had no cap.
+        </p>
+
+        <div class="picker-row">
+          <label for="baselineA">
+            Noise baseline <span class="muted">(optional — two runs of the same build)</span>
+          </label>
+          <div class="picker">
+            <select id="baselineA"><option value="">None</option></select>
+            <select id="baselineB"><option value="">None</option></select>
+          </div>
+          <p class="hint">
+            Whatever two runs of the same build disagree about is run-to-run variance. Naming a pair
+            here lets the comparison mark smaller differences as noise instead of as change.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="run-compare" class="primary">Compare</button>
+          <button type="button" id="refresh-sessions">Refresh list</button>
+          <button type="button" id="export-comparison" hidden>Save as Markdown</button>
+          <button type="button" id="export-comparison-pdf" hidden>Save as PDF</button>
+        </div>
+
+        <div id="compare-result"></div>
+      </section>
+
+    </main>
+
+    <script src="/chart.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
