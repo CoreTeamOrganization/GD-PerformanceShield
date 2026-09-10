@@ -126,8 +126,8 @@ function createWindow(port) {
     height: 900,
     minWidth: 940,
     minHeight: 640,
-    title: 'GD-PerformanceShield',
-    backgroundColor: '#0e1116', // matches the console, so there is no white flash
+    title: 'GD PerformanceShield',
+    backgroundColor: '#0b0d12', // matches the console's dark --bg, so there is no white flash
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {

@@ -258,7 +258,7 @@ function initTheme() {
 
   const stored = () => {
     try {
-      return localStorage.getItem('oom.theme') || 'system';
+      return localStorage.getItem('oom.theme') || 'dark';
     } catch {
       return 'system';
     }

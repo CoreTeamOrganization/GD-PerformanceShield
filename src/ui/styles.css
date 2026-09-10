@@ -19,39 +19,47 @@
    against an explicit light choice.
    --------------------------------------------------------------------------- */
 
+/* Brand: Game District gold on graphite. Dark is the tool's face - performance
+   instruments live in dark UIs - and light is the Builder Notes cream for
+   anyone who insists. Device A/B keep their orange/blue pair in both themes:
+   it is a colorblind-safe pairing and every chart legend already teaches it. */
 :root {
   color-scheme: light;
-  --bg: #f4f6f9;
+  --bg: #efede6;
   --panel: #ffffff;
-  --panel-2: #eef1f6;
-  --border: #d3dae3;
-  --text: #16202c;
-  --muted: #5a6875;
-  --accent: #1668d6;
-  --ok: #1a7f37;
-  --warn: #9a6700;
-  --bad: #cf222e;
+  --panel-2: #f5f3ec;
+  --border: #d9d6ca;
+  --text: #131c30;
+  --muted: #6b6b66;
+  --accent: #c79a17;
+  --accent-strong: #f4c430;
+  --accent-ink: #131313;
+  --ok: #2f7d4f;
+  --warn: #b96b00;
+  --bad: #c0392b;
   --device-a: #bc4c00;
   --device-b: #1668d6;
-  --shadow: 0 1px 2px rgba(16, 32, 48, 0.06);
-  --radius: 10px;
+  --shadow: 0 1px 3px rgba(19, 28, 48, 0.08);
+  --radius: 12px;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0e1116;
-  --panel: #161b22;
-  --panel-2: #1c232c;
-  --border: #2a323d;
-  --text: #e6edf3;
-  --muted: #8b98a5;
-  --accent: #4f9cf9;
-  --ok: #3fb950;
-  --warn: #d29922;
-  --bad: #f85149;
+  --bg: #0b0d12;
+  --panel: #12161f;
+  --panel-2: #181d29;
+  --border: #242b39;
+  --text: #e9ecf3;
+  --muted: #8b94a7;
+  --accent: #f4c430;
+  --accent-strong: #f4c430;
+  --accent-ink: #131313;
+  --ok: #3ecf8e;
+  --warn: #ff9d43;
+  --bad: #ff5c5c;
   --device-a: #f0883e;
   --device-b: #58a6ff;
-  --shadow: none;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -71,8 +79,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 22px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 22px;
+  border-bottom: 2px solid var(--accent-strong);
   background: var(--panel);
   position: sticky;
   top: 0;
@@ -80,11 +88,15 @@ body {
 }
 
 .brand { display: flex; align-items: baseline; gap: 10px; }
-.brand h1 { font-size: 17px; margin: 0; letter-spacing: -0.2px; }
-.brand .subtitle { color: var(--muted); font-size: 12px; }
-.brand .dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--accent); align-self: center;
+.brand h1 { font-size: 16px; margin: 0; letter-spacing: 0.2px; font-weight: 700; }
+.brand h1 .brand-gd { color: var(--accent); margin-right: 1px; }
+.brand .subtitle {
+  color: var(--muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.brand .mark {
+  width: 18px; height: 18px; align-self: center; flex-shrink: 0;
+  color: var(--accent-strong);
 }
 
 .status-pill {
@@ -140,7 +152,7 @@ button, .button {
 }
 button:hover:not(:disabled), .button:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #04121f; font-weight: 600; }
+button.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--accent-ink); font-weight: 600; }
 
 .role-badge {
   font-weight: 700; font-size: 11px; padding: 2px 8px;
@@ -240,7 +252,7 @@ canvas { width: 100%; display: block; }
 .panel h2 .step {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; margin-right: 8px;
-  border-radius: 50%; background: var(--accent); color: #04121f;
+  border-radius: 6px; background: var(--accent-strong); color: var(--accent-ink);
   font-size: 11px; font-weight: 700;
 }
 
@@ -572,8 +584,8 @@ select:disabled { opacity: 0.55; }
   letter-spacing: 0.05em;
   padding: 2px 7px;
   border-radius: 4px;
-  background: var(--accent);
-  color: #04121f;
+  background: var(--accent-strong);
+  color: var(--accent-ink);
   font-weight: 700;
 }
 .opt-block p { margin: 0; line-height: 1.5; }
@@ -962,29 +974,30 @@ select:disabled { opacity: 0.55; }
    harder to read than one that holds its shape.
    --------------------------------------------------------------------------- */
 
-.live-stats { display: flex; gap: 6px; margin: 6px 0 2px; }
+.live-stats { display: flex; gap: 8px; margin: 8px 0 4px; }
 .live-stat {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 4px 2px;
+  gap: 2px;
+  padding: 7px 4px 6px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 7px;
   background: var(--bg);
 }
 .ls-label {
   font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .09em;
   color: var(--muted);
 }
 .ls-value {
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  letter-spacing: -0.3px;
+  line-height: 1.05;
 }
 .live-stat.ok .ls-value { color: var(--ok); }
 .live-stat.warn .ls-value { color: var(--warn); }
