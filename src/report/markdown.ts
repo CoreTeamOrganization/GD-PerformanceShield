@@ -1463,11 +1463,23 @@ function renderFpsChart(w: Write, report: AnalysisReport): void {
       displayHz: d.fps?.displayHz ?? null,
       // The same letters the detail section and the event table use, badged on
       // the curve, so "look at B" resolves in one glance.
-      events: (d.fpsEvents ?? []).map((e) => ({
-        elapsedMs: e.atMs,
-        letter: e.letter,
-        kind: e.kind,
-      })),
+      // Lettered findings plus the context lines - ads opening, leaving the
+      // game, returning - that explain what the curve did.
+      events: [
+        ...(d.fpsEvents ?? []).map((e) => ({
+          elapsedMs: e.atMs,
+          letter: e.letter,
+          kind: e.kind,
+        })),
+        ...(report.session?.timeline ?? [])
+          .filter((t) => ['ad_opened', 'app_left', 'app_returned'].includes(t.type))
+          .map((t) => ({
+            elapsedMs: t.elapsedMs,
+            letter: '',
+            kind: 'context' as const,
+            label: t.label,
+          })),
+      ],
       forPrint: false,
     });
     if (!svg) continue;

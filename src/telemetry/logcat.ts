@@ -44,6 +44,11 @@ const MATCHERS: Matcher[] = [
   { re: /ANR in |Input dispatching timed out/i, category: 'anr' },
   { re: /\bGC_|Explicit concurrent .*GC|Background .*GC .*freed/i, category: 'gc' },
   { re: /^Unity\b|UnityEngine|Unity\s*:/i, category: 'unity' },
+  // Activity starts, for the context lines on the charts: ads are separate
+  // activities with recognizable SDK classes, and home/return are the same
+  // announcement. Emitted by system_server, so it must count as a system
+  // signal below or a pid filter would drop every one of them.
+  { re: /Activity(Task)?Manager: START u\d/, category: 'activity' },
 ];
 
 export interface LogcatMonitorOptions {
@@ -116,7 +121,9 @@ export class LogcatMonitor extends EventEmitter {
       const belongsToApp = this.opts.pids.includes(parsed.pid);
       const mentionsApp = this.opts.pids.some((p) => line.includes(String(p)));
       appRelated = appRelated || belongsToApp || mentionsApp;
-      const isSystemSignal = category === 'oom_kill' || category === 'low_memory' || category === 'anr';
+      const isSystemSignal =
+        category === 'oom_kill' || category === 'low_memory' || category === 'anr' ||
+        category === 'activity';
       if (!appRelated && !isSystemSignal) return;
     }
 

@@ -27,8 +27,15 @@ export interface FpsPoint {
 export interface FpsChartEvent {
   elapsedMs: number;
   letter: string;
-  /** A drop is a fault and is marked as one; a step is context. */
-  kind: 'drop' | 'step';
+  /**
+   * A drop is a fault and is marked as one; a step is context. A `context`
+   * event is a labeled moment from outside the curve - an ad opening, leaving
+   * for home, coming back - drawn as a guide line rather than a badge, because
+   * it is not a finding, it is what explains one.
+   */
+  kind: 'drop' | 'step' | 'context';
+  /** Label for context lines; letters do that job for drops and steps. */
+  label?: string;
 }
 
 export interface FpsChartOptions {
@@ -166,7 +173,32 @@ export function renderFpsChartSvg(opts: FpsChartOptions): string {
    * switching refresh rate, which is not the game's doing. Colouring both the
    * same would put a display setting in the same visual class as a freeze.
    */
+  // Context lines first, under the badges: dashed verticals with a small label
+  // at the top. Labels alternate between two rows so adjacent events (an ad
+  // opening and the return seconds later) do not overwrite each other.
+  let contextRow = 0;
   for (const event of opts.events ?? []) {
+    if (event.kind !== 'context' || event.elapsedMs > maxT) continue;
+    const cx = Math.min(width - pad.right, Math.max(pad.left, x(event.elapsedMs)));
+    out.push(
+      `<line x1="${cx.toFixed(1)}" y1="${pad.top}" x2="${cx.toFixed(1)}" ` +
+        `y2="${pad.top + plotH}" stroke="${muted}" stroke-width="1" stroke-dasharray="2 4"/>`,
+    );
+    if (event.label) {
+      const short = event.label.length > 22 ? `${event.label.slice(0, 21)}…` : event.label;
+      const ty = pad.top + 8 + (contextRow % 2) * 10;
+      contextRow++;
+      const anchor = cx > width - pad.right - 90 ? 'end' : 'start';
+      const tx = anchor === 'end' ? cx - 3 : cx + 3;
+      out.push(
+        `<text x="${tx.toFixed(1)}" y="${ty}" fill="${muted}" font-size="8.5" ` +
+          `text-anchor="${anchor}">${esc(short)}</text>`,
+      );
+    }
+  }
+
+  for (const event of opts.events ?? []) {
+    if (event.kind === 'context') continue;
     if (!event.letter || event.elapsedMs > maxT) continue;
 
     const cx = Math.min(width - pad.right - 9, Math.max(pad.left + 9, x(event.elapsedMs)));

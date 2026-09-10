@@ -60612,6 +60612,23 @@ var FpsSampler = class {
   layer = null;
   timeStatsLayer = null;
   source = null;
+  /**
+   * Signs of another profiler sharing SurfaceFlinger TimeStats.
+   *
+   * TimeStats is one global counter set per device. A second tool (GameBench's
+   * probe does exactly this) clears it on its own schedule, and a diff taken
+   * across a foreign clear counts only the frames since *their* reset - a game
+   * running at 55 fps reads as 3. Measured live on a Xiaomi with GameBench
+   * attached: 33 of 154 windows carried 1-10 frames whose own histograms held
+   * nothing longer than 33 ms - physically impossible as real readings, since a
+   * 1-frame second must contain a ~1000 ms interval. Truncated windows are
+   * discarded (see `windowLooksTruncated`), backwards counters re-baseline, and
+   * both are counted here so the operator can be told to run one profiler at a
+   * time instead of being handed a jagged chart.
+   */
+  truncatedWindows = 0;
+  counterResets = 0;
+  interferenceWarned = false;
   lastGfx = null;
   lastTimeStatsAt = 0;
   /**
@@ -60631,6 +60648,10 @@ var FpsSampler = class {
   /** What was tried, and why each one did or did not work. */
   get diagnostics() {
     return this.attempts;
+  }
+  /** True once enough corrupt windows have been seen to blame a second profiler. */
+  get interferenceSuspected() {
+    return this.truncatedWindows + this.counterResets >= 3;
   }
   note(strategy, ok, detail) {
     this.attempts.push({ strategy, ok, detail });
@@ -60789,6 +60810,8 @@ var FpsSampler = class {
     });
     if (prev === null) return null;
     if (now.totalFrames < prev.totalFrames || now.droppedFrames < prev.droppedFrames) {
+      this.counterResets++;
+      this.warnOnInterference();
       this.logger?.debug("Frame counters went backwards; re-baselining", {
         was: prev.totalFrames,
         now: now.totalFrames
@@ -60828,6 +60851,11 @@ var FpsSampler = class {
       }
     }
     if (mine === null || cumulative === null || mine.totalFrames === 0) return null;
+    if (windowLooksTruncated(mine.buckets, windowMs)) {
+      this.truncatedWindows++;
+      this.warnOnInterference();
+      return null;
+    }
     this.timeStatsLayer = cumulative.layer;
     const fps = mine.totalFrames / (windowMs / 1e3);
     const matchesDisplayRate = displayHz !== null && displayHz > 0 ? Math.abs(fps - displayHz) / displayHz < 0.06 : null;
@@ -60879,11 +60907,34 @@ var FpsSampler = class {
       source: "gfxinfo"
     };
   }
+  warnOnInterference() {
+    if (this.interferenceWarned || !this.interferenceSuspected) return;
+    this.interferenceWarned = true;
+    this.note(
+      "SurfaceFlinger TimeStats",
+      true,
+      "Another profiler appears to be clearing SurfaceFlinger statistics during the session (GameBench does this). Corrupt windows are being discarded rather than reported wrong - run one profiler at a time for a full-resolution session."
+    );
+    this.logger?.warn(
+      "TimeStats counters are being reset by another process - a second profiler is probably attached. Corrupt frame-rate windows are discarded; run one profiler at a time.",
+      { truncatedWindows: this.truncatedWindows, counterResets: this.counterResets }
+    );
+  }
   /** Leave TimeStats as we found it, so the tool costs the device nothing after. */
   async release() {
     if (this.source === "timestats") await this.timeStats(["-disable"]);
   }
 };
+function windowLooksTruncated(buckets, windowMs) {
+  if (windowMs < 400 || buckets.length === 0) return false;
+  let covered = 0;
+  let longest = 0;
+  for (const b of buckets) {
+    covered += b.ms * b.count;
+    if (b.ms > longest) longest = b.ms;
+  }
+  return covered < windowMs * 0.35 && longest < windowMs * 0.4;
+}
 function parseTimeStats(text) {
   const sections = text.split(/^[ 	]*(?:Layer name:|layerName\s*=)[ 	]*/m).slice(1);
   const out = [];
@@ -62794,6 +62845,10 @@ var MemorySampler = class extends import_node_events3.EventEmitter {
   get frameRateDiagnostics() {
     return this.fpsDiagnostics;
   }
+  /** True when a second profiler seems to be clearing SurfaceFlinger stats. */
+  get frameRateInterference() {
+    return this.fps?.interferenceSuspected ?? false;
+  }
   /**
    * What each subsystem probe managed, for the manifest and the report's
    * limitations section.
@@ -63369,6 +63424,7 @@ var CaptureSession = class extends import_node_events4.EventEmitter {
           worstFrameMs: r.fpsReadings.at(-1)?.frames?.longestFrameMs ?? r.fpsReadings.at(-1)?.worstFrameMs ?? null,
           fpsMatchesDisplayRate: r.fpsReadings.at(-1)?.matchesDisplayRate ?? null,
           fpsSource: r.sampler.frameRateSource,
+          fpsInterference: r.sampler.frameRateInterference,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,
           temperatureC: r.healthSamples.at(-1)?.thermal?.maxZoneC ?? r.healthSamples.at(-1)?.battery?.temperatureC ?? null,
           throttling: r.healthSamples.at(-1)?.thermal?.throttling ?? false,

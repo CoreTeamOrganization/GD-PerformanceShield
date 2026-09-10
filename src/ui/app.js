@@ -875,6 +875,18 @@ function onEvent(event) {
       event.label,
     );
   }
+  // Context, not incidents - but the feed is where the operator is looking,
+  // and "Ad opened" is exactly what explains the memory step beside it.
+  if (['ad_opened', 'app_left', 'app_returned'].includes(event.type)) {
+    addIncident(
+      `evt:${event.type}:${event.elapsedMs}`,
+      event.elapsedMs,
+      event.role ?? null,
+      event.type === 'ad_opened' ? 'ad' : 'app',
+      'info',
+      event.label,
+    );
+  }
   drawChart();
 }
 

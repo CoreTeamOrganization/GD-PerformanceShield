@@ -12,6 +12,7 @@
  * mid-session, every sample taken before that point is already on disk.
  */
 import { EventEmitter } from 'node:events';
+import { classifyActivityStart } from './activityEvents.js';
 
 import { JsonlWriter } from '../core/jsonl.js';
 import type { Logger } from '../core/logger.js';
@@ -385,6 +386,13 @@ export class CaptureSession extends EventEmitter {
     runtime.logcat.on('log', (event: LogEvent) => {
       runtime.logWriter.write(event);
 
+      // Activity starts become context marks on the timeline - ads opening,
+      // leaving for home, returning - and are not log noise for the operator.
+      if (event.category === 'activity') {
+        this.noteActivity(runtime, event);
+        return;
+      }
+
       // The reporter's lines are data, not log noise: they carry the only
       // per-asset-type figures that exist, and the OS cannot produce them.
       const reading = runtime.engine.ingest(event.message);
@@ -443,6 +451,62 @@ export class CaptureSession extends EventEmitter {
    * Record a timeline marker. Called by the operator UI (Step 7) and by the
    * system for lifecycle events.
    */
+  /** serial -> why the game is not in front right now, for the return label. */
+  private readonly awayBySerial = new Map<string, 'ad' | 'home' | null>();
+  /** serial -> elapsedMs of the last context mark, to collapse start bursts. */
+  private readonly lastActivityMarkAt = new Map<string, number>();
+
+  /**
+   * Turn an activity-start log line into a context mark on the timeline.
+   *
+   * Stateful where the classifier is not: a game-activity start is only worth a
+   * mark when something else was in front, and its label depends on what that
+   * was. Bursts are collapsed - one ad shows as one mark, not as the three
+   * activity starts its SDK actually performs.
+   */
+  private noteActivity(runtime: DeviceRuntime, event: LogEvent): void {
+    const signal = classifyActivityStart(event.message, this.opts.packageName);
+    if (!signal) return;
+
+    const serial = runtime.target.device.serial;
+    const away = this.awayBySerial.get(serial) ?? null;
+    const lastAt = this.lastActivityMarkAt.get(serial) ?? -Infinity;
+    const elapsed = event.elapsedMs;
+    if (elapsed - lastAt < 1500) return;
+
+    if (signal.kind === 'ad') {
+      this.awayBySerial.set(serial, 'ad');
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark('ad_opened', {
+        source: 'system',
+        serial,
+        label: `Ad opened (${signal.sdk})`,
+        data: { sdk: signal.sdk },
+      });
+      return;
+    }
+    if (signal.kind === 'home') {
+      // Only worth saying when the game was in front - launcher restarts of
+      // its own surfaces would otherwise spam the timeline.
+      if (away === 'home') return;
+      this.awayBySerial.set(serial, 'home');
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark('app_left', { source: 'system', serial, label: 'Left the game (home)' });
+      return;
+    }
+    // The game's own activity starting matters only as the end of an away
+    // stretch: launch and internal navigation stay unmarked.
+    if (away !== null) {
+      this.awayBySerial.set(serial, null);
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark('app_returned', {
+        source: 'system',
+        serial,
+        label: away === 'ad' ? 'Back from the ad' : 'Back in the game',
+      });
+    }
+  }
+
   mark(
     type: string,
     opts: {

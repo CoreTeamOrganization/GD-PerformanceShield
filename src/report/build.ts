@@ -601,5 +601,8 @@ function isNotableSystemEvent(type: string): boolean {
     'process_restarted',
     'process_killed',
     'process_crash',
+    'ad_opened',
+    'app_left',
+    'app_returned',
   ].includes(type);
 }

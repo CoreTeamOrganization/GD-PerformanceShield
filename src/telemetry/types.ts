@@ -177,7 +177,7 @@ export interface LogEvent {
   tag: string;
   message: string;
   /** Classification assigned by the log matcher. */
-  category: 'oom_kill' | 'low_memory' | 'gc' | 'unity' | 'crash' | 'anr' | 'other';
+  category: 'oom_kill' | 'low_memory' | 'gc' | 'unity' | 'crash' | 'anr' | 'activity' | 'other';
   /**
    * Whether the line is about the game under test rather than some other
    * process. System-wide signals (kill notices, low-memory warnings) are kept
