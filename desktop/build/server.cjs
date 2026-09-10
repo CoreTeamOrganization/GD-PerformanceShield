@@ -3951,7 +3951,7 @@ var require_buffer_list = __commonJS({
         }
       }, {
         key: "join",
-        value: function join9(s) {
+        value: function join10(s) {
           if (this.length === 0) return "";
           var p = this.head;
           var ret = "" + p.data;
@@ -14950,7 +14950,7 @@ var require_thread_stream = __commonJS({
     var { version } = require_package();
     var { EventEmitter: EventEmitter6 } = require("events");
     var { Worker } = require("worker_threads");
-    var { join: join9 } = require("path");
+    var { join: join10 } = require("path");
     var { pathToFileURL } = require("url");
     var { wait } = require_wait();
     var {
@@ -15001,7 +15001,7 @@ var require_thread_stream = __commonJS({
     function createWorker(stream, opts) {
       const { filename, workerData } = opts;
       const bundlerOverrides = "__bundlerPathsOverrides" in globalThis ? globalThis.__bundlerPathsOverrides : {};
-      const toExecute = bundlerOverrides["thread-stream-worker"] || join9(__dirname, "lib", "worker.js");
+      const toExecute = bundlerOverrides["thread-stream-worker"] || join10(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
         name: opts.workerOpts?.name || "thread-stream",
@@ -15467,9 +15467,9 @@ var require_transport = __commonJS({
   "node_modules/pino/lib/transport.js"(exports2, module2) {
     "use strict";
     var { createRequire: createRequire2 } = require("module");
-    var { existsSync: existsSync11 } = require("node:fs");
+    var { existsSync: existsSync12 } = require("node:fs");
     var getCallers = require_caller();
-    var { join: join9, isAbsolute: isAbsolute2, sep: sep5 } = require("node:path");
+    var { join: join10, isAbsolute: isAbsolute2, sep: sep5 } = require("node:path");
     var { fileURLToPath: fileURLToPath2 } = require("node:url");
     var sleep2 = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
@@ -15541,7 +15541,7 @@ var require_transport = __commonJS({
           return false;
         }
       }
-      return isAbsolute2(path) && !existsSync11(path);
+      return isAbsolute2(path) && !existsSync12(path);
     }
     function stripQuotes(value) {
       const first = value[0];
@@ -15622,7 +15622,7 @@ var require_transport = __commonJS({
         throw new Error("only one of target or targets can be specified");
       }
       if (targets) {
-        target = bundlerOverrides["pino-worker"] || join9(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
         options.targets = targets.filter((dest) => dest.target).map((dest) => {
           return {
             ...dest,
@@ -15640,7 +15640,7 @@ var require_transport = __commonJS({
           });
         });
       } else if (pipeline2) {
-        target = bundlerOverrides["pino-worker"] || join9(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join10(__dirname, "worker.js");
         options.pipelines = [pipeline2.map((dest) => {
           return {
             ...dest,
@@ -15663,7 +15663,7 @@ var require_transport = __commonJS({
           return origin;
         }
         if (origin === "pino/file") {
-          return join9(__dirname, "..", "file.js");
+          return join10(__dirname, "..", "file.js");
         }
         let fixTarget2;
         for (const filePath of callers) {
@@ -16643,7 +16643,7 @@ var require_safe_stable_stringify = __commonJS({
               return circularValue;
             }
             let res = "";
-            let join9 = ",";
+            let join10 = ",";
             const originalIndentation = indentation;
             if (Array.isArray(value)) {
               if (value.length === 0) {
@@ -16657,7 +16657,7 @@ var require_safe_stable_stringify = __commonJS({
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join9 = `,
+                join10 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -16665,13 +16665,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join9;
+                res += join10;
               }
               const tmp = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join9}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -16692,7 +16692,7 @@ ${originalIndentation}`;
             let separator = "";
             if (spacer !== "") {
               indentation += spacer;
-              join9 = `,
+              join10 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -16706,13 +16706,13 @@ ${indentation}`;
               const tmp = stringifyFnReplacer(key2, value, stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join9;
+                separator = join10;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...":${whitespace}"${getItemCount(removedKeys)} not stringified"`;
-              separator = join9;
+              separator = join10;
             }
             if (spacer !== "" && separator.length > 1) {
               res = `
@@ -16753,7 +16753,7 @@ ${originalIndentation}`;
             }
             const originalIndentation = indentation;
             let res = "";
-            let join9 = ",";
+            let join10 = ",";
             if (Array.isArray(value)) {
               if (value.length === 0) {
                 return "[]";
@@ -16766,7 +16766,7 @@ ${originalIndentation}`;
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join9 = `,
+                join10 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -16774,13 +16774,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join9;
+                res += join10;
               }
               const tmp = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join9}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -16793,7 +16793,7 @@ ${originalIndentation}`;
             let whitespace = "";
             if (spacer !== "") {
               indentation += spacer;
-              join9 = `,
+              join10 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -16802,7 +16802,7 @@ ${indentation}`;
               const tmp = stringifyArrayReplacer(key2, value[key2], stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join9;
+                separator = join10;
               }
             }
             if (spacer !== "" && separator.length > 1) {
@@ -16860,20 +16860,20 @@ ${originalIndentation}`;
               indentation += spacer;
               let res2 = `
 ${indentation}`;
-              const join10 = `,
+              const join11 = `,
 ${indentation}`;
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
               let i = 0;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyIndent(String(i), value[i], stack, spacer, indentation);
                 res2 += tmp2 !== void 0 ? tmp2 : "null";
-                res2 += join10;
+                res2 += join11;
               }
               const tmp = stringifyIndent(String(i), value[i], stack, spacer, indentation);
               res2 += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res2 += `${join10}"... ${getItemCount(removedKeys)} not stringified"`;
+                res2 += `${join11}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               res2 += `
 ${originalIndentation}`;
@@ -16889,16 +16889,16 @@ ${originalIndentation}`;
               return '"[Object]"';
             }
             indentation += spacer;
-            const join9 = `,
+            const join10 = `,
 ${indentation}`;
             let res = "";
             let separator = "";
             let maximumPropertiesToStringify = Math.min(keyLength, maximumBreadth);
             if (isTypedArrayWithEntries(value)) {
-              res += stringifyTypedArray(value, join9, maximumBreadth);
+              res += stringifyTypedArray(value, join10, maximumBreadth);
               keys = keys.slice(value.length);
               maximumPropertiesToStringify -= value.length;
-              separator = join9;
+              separator = join10;
             }
             if (deterministic) {
               keys = sort(keys, comparator);
@@ -16909,13 +16909,13 @@ ${indentation}`;
               const tmp = stringifyIndent(key2, value[key2], stack, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}: ${tmp}`;
-                separator = join9;
+                separator = join10;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...": "${getItemCount(removedKeys)} not stringified"`;
-              separator = join9;
+              separator = join10;
             }
             if (separator !== "") {
               res = `
@@ -51153,7 +51153,7 @@ __export(server_exports, {
   startServer: () => startServer
 });
 module.exports = __toCommonJS(server_exports);
-var import_node_fs17 = require("node:fs");
+var import_node_fs18 = require("node:fs");
 var import_websocket = __toESM(require_websocket2(), 1);
 var import_fastify = __toESM(require_fastify(), 1);
 
@@ -55219,6 +55219,12 @@ function androidSdkRoot() {
   const guesses = WINDOWS ? [(0, import_node_path.join)((0, import_node_os.homedir)(), "AppData", "Local", "Android", "Sdk")] : [(0, import_node_path.join)((0, import_node_os.homedir)(), "Library", "Android", "sdk"), (0, import_node_path.join)((0, import_node_os.homedir)(), "Android", "Sdk")];
   return guesses.find((g) => (0, import_node_fs.existsSync)(g)) ?? null;
 }
+function managedToolsDir() {
+  return env("TOOLS_DIR") ?? (0, import_node_path.join)((0, import_node_os.homedir)(), ".gd-performanceshield", "tools");
+}
+function managedAdbPath() {
+  return (0, import_node_path.join)(managedToolsDir(), "platform-tools", `adb${EXE}`);
+}
 function resolveAdb() {
   const explicit = env("ADB_PATH");
   if (explicit) return explicit;
@@ -55230,6 +55236,8 @@ function resolveAdb() {
   const known = WINDOWS ? [] : ["/opt/homebrew/bin/adb", "/usr/local/bin/adb", "/opt/local/bin/adb"];
   const found = known.find((k) => (0, import_node_fs.existsSync)(k));
   if (found) return found;
+  const managed = managedAdbPath();
+  if ((0, import_node_fs.existsSync)(managed)) return managed;
   return "adb";
 }
 function resolveAapt2() {
@@ -55773,27 +55781,264 @@ async function waitFor(check, opts) {
   );
 }
 
+// src/devices/adbProvision.ts
+var import_node_fs6 = require("node:fs");
+var import_node_os2 = require("node:os");
+var import_node_path5 = require("node:path");
+
+// src/apk/zip.ts
+var import_node_fs5 = require("node:fs");
+var import_node_zlib = require("node:zlib");
+var EOCD_SIGNATURE = 101010256;
+var EOCD64_LOCATOR_SIGNATURE = 117853008;
+var EOCD64_SIGNATURE = 101075792;
+var CENTRAL_SIGNATURE = 33639248;
+var MAX_COMMENT = 65535;
+var ZipReader = class {
+  constructor(path) {
+    this.path = path;
+    this.fileSize = (0, import_node_fs5.statSync)(path).size;
+    this.fd = (0, import_node_fs5.openSync)(path, "r");
+  }
+  path;
+  fd;
+  fileSize;
+  entriesCache = null;
+  close() {
+    if (this.fd >= 0) {
+      (0, import_node_fs5.closeSync)(this.fd);
+      this.fd = -1;
+    }
+  }
+  read(length, position) {
+    const clamped = Math.max(0, Math.min(length, this.fileSize - position));
+    const buf = Buffer.alloc(clamped);
+    if (clamped > 0) (0, import_node_fs5.readSync)(this.fd, buf, 0, clamped, position);
+    return buf;
+  }
+  /** All central-directory entries, parsed once and cached. */
+  entries() {
+    if (this.entriesCache) return this.entriesCache;
+    const { offset, count } = this.locateCentralDirectory();
+    const cd = this.read(this.fileSize - offset, offset);
+    const entries = [];
+    let pos = 0;
+    for (let i = 0; i < count && pos + 46 <= cd.length; i++) {
+      if (cd.readUInt32LE(pos) !== CENTRAL_SIGNATURE) break;
+      const compressionMethod = cd.readUInt16LE(pos + 10);
+      const crc32 = cd.readUInt32LE(pos + 16);
+      let compressedSize = cd.readUInt32LE(pos + 20);
+      let uncompressedSize = cd.readUInt32LE(pos + 24);
+      const nameLen = cd.readUInt16LE(pos + 28);
+      const extraLen = cd.readUInt16LE(pos + 30);
+      const commentLen = cd.readUInt16LE(pos + 32);
+      let localHeaderOffset = cd.readUInt32LE(pos + 42);
+      const name = cd.subarray(pos + 46, pos + 46 + nameLen).toString("utf8");
+      const extra = cd.subarray(pos + 46 + nameLen, pos + 46 + nameLen + extraLen);
+      if (uncompressedSize === 4294967295 || compressedSize === 4294967295 || localHeaderOffset === 4294967295) {
+        const z64 = findZip64Extra(extra);
+        if (z64) {
+          let o = 0;
+          if (uncompressedSize === 4294967295 && o + 8 <= z64.length) {
+            uncompressedSize = Number(z64.readBigUInt64LE(o));
+            o += 8;
+          }
+          if (compressedSize === 4294967295 && o + 8 <= z64.length) {
+            compressedSize = Number(z64.readBigUInt64LE(o));
+            o += 8;
+          }
+          if (localHeaderOffset === 4294967295 && o + 8 <= z64.length) {
+            localHeaderOffset = Number(z64.readBigUInt64LE(o));
+          }
+        }
+      }
+      entries.push({
+        name,
+        compressedSize,
+        uncompressedSize,
+        compressionMethod,
+        crc32,
+        localHeaderOffset,
+        isDirectory: name.endsWith("/")
+      });
+      pos += 46 + nameLen + extraLen + commentLen;
+    }
+    this.entriesCache = entries;
+    return entries;
+  }
+  find(name) {
+    return this.entries().find((e) => e.name === name);
+  }
+  has(name) {
+    return this.find(name) !== void 0;
+  }
+  /** Read and decompress one entry. Returns null when it is absent. */
+  readFile(name) {
+    const entry = this.find(name);
+    if (!entry) return null;
+    return this.readEntry(entry);
+  }
+  readEntry(entry) {
+    const header = this.read(30, entry.localHeaderOffset);
+    if (header.length < 30) throw new Error(`Truncated local header for ${entry.name}`);
+    const nameLen = header.readUInt16LE(26);
+    const extraLen = header.readUInt16LE(28);
+    const dataOffset = entry.localHeaderOffset + 30 + nameLen + extraLen;
+    const raw = this.read(entry.compressedSize, dataOffset);
+    if (entry.compressionMethod === 0) return raw;
+    if (entry.compressionMethod === 8) return (0, import_node_zlib.inflateRawSync)(raw);
+    throw new Error(`Unsupported compression method ${entry.compressionMethod} for ${entry.name}`);
+  }
+  locateCentralDirectory() {
+    const searchLen = Math.min(this.fileSize, MAX_COMMENT + 22);
+    const tail = this.read(searchLen, this.fileSize - searchLen);
+    let eocd = -1;
+    for (let i = tail.length - 22; i >= 0; i--) {
+      if (tail.readUInt32LE(i) === EOCD_SIGNATURE) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) throw new Error(`Not a ZIP archive (no end-of-central-directory): ${this.path}`);
+    let count = tail.readUInt16LE(eocd + 10);
+    let offset = tail.readUInt32LE(eocd + 16);
+    if (count === 65535 || offset === 4294967295) {
+      const locator = eocd - 20;
+      if (locator >= 0 && tail.readUInt32LE(locator) === EOCD64_LOCATOR_SIGNATURE) {
+        const eocd64Offset = Number(tail.readBigUInt64LE(locator + 8));
+        const eocd64 = this.read(56, eocd64Offset);
+        if (eocd64.length >= 56 && eocd64.readUInt32LE(0) === EOCD64_SIGNATURE) {
+          count = Number(eocd64.readBigUInt64LE(32));
+          offset = Number(eocd64.readBigUInt64LE(48));
+        }
+      }
+    }
+    return { offset, count };
+  }
+};
+function findZip64Extra(extra) {
+  let pos = 0;
+  while (pos + 4 <= extra.length) {
+    const id = extra.readUInt16LE(pos);
+    const size = extra.readUInt16LE(pos + 2);
+    if (id === 1) return extra.subarray(pos + 4, pos + 4 + size);
+    pos += 4 + size;
+  }
+  return null;
+}
+function withZip(path, fn) {
+  const zip = new ZipReader(path);
+  try {
+    return fn(zip);
+  } finally {
+    zip.close();
+  }
+}
+
+// src/devices/adbProvision.ts
+var PLATFORM_KEY = {
+  darwin: "darwin",
+  win32: "windows",
+  linux: "linux"
+};
+function platformToolsUrl(platform = process.platform) {
+  const key = PLATFORM_KEY[platform];
+  return key ? `https://dl.google.com/android/repository/platform-tools-latest-${key}.zip` : null;
+}
+async function ensureManagedAdb(logger2) {
+  const target = managedAdbPath();
+  if ((0, import_node_fs6.existsSync)(target)) return target;
+  const url = platformToolsUrl();
+  if (!url) {
+    throw new Error(`No platform-tools package exists for ${process.platform}.`);
+  }
+  logger2?.info("adb is not installed - fetching Android platform-tools", { url });
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Downloading platform-tools failed: HTTP ${response.status} from dl.google.com`);
+  }
+  const archive = Buffer.from(await response.arrayBuffer());
+  const staging = (0, import_node_path5.join)((0, import_node_os2.tmpdir)(), `gdps-platform-tools-${process.pid}`);
+  (0, import_node_fs6.rmSync)(staging, { recursive: true, force: true });
+  (0, import_node_fs6.mkdirSync)(staging, { recursive: true });
+  const archivePath = (0, import_node_path5.join)(staging, "platform-tools.zip");
+  (0, import_node_fs6.writeFileSync)(archivePath, archive);
+  const zip = new ZipReader(archivePath);
+  try {
+    for (const entry of zip.entries()) {
+      if (entry.isDirectory) continue;
+      const clean = entry.name.replace(/\\/g, "/");
+      if (clean.includes("..")) continue;
+      const dest = (0, import_node_path5.join)(staging, clean);
+      (0, import_node_fs6.mkdirSync)((0, import_node_path5.dirname)(dest), { recursive: true });
+      (0, import_node_fs6.writeFileSync)(dest, zip.readEntry(entry));
+    }
+  } finally {
+    zip.close();
+  }
+  (0, import_node_fs6.rmSync)(archivePath, { force: true });
+  const stagedAdb = (0, import_node_path5.join)(staging, "platform-tools", process.platform === "win32" ? "adb.exe" : "adb");
+  if (!(0, import_node_fs6.existsSync)(stagedAdb)) {
+    (0, import_node_fs6.rmSync)(staging, { recursive: true, force: true });
+    throw new Error("The downloaded platform-tools archive did not contain adb.");
+  }
+  if (process.platform !== "win32") {
+    (0, import_node_fs6.chmodSync)(stagedAdb, 493);
+    const fastboot = (0, import_node_path5.join)(staging, "platform-tools", "fastboot");
+    if ((0, import_node_fs6.existsSync)(fastboot)) (0, import_node_fs6.chmodSync)(fastboot, 493);
+  }
+  const finalDir = (0, import_node_path5.join)(managedToolsDir(), "platform-tools");
+  (0, import_node_fs6.mkdirSync)(managedToolsDir(), { recursive: true });
+  (0, import_node_fs6.rmSync)(finalDir, { recursive: true, force: true });
+  (0, import_node_fs6.renameSync)((0, import_node_path5.join)(staging, "platform-tools"), finalDir);
+  (0, import_node_fs6.rmSync)(staging, { recursive: true, force: true });
+  logger2?.info("platform-tools installed", { path: target });
+  return target;
+}
+
 // src/devices/adb.ts
 var Adb = class {
   constructor(adbPath, logger2) {
-    this.adbPath = adbPath;
     this.logger = logger2;
+    this.path = adbPath;
   }
-  adbPath;
   logger;
-  /** Run a raw adb command with no device target (e.g. `devices`, `start-server`). */
+  path;
+  /** One provisioning attempt per process - a failing download must not retry per call. */
+  provisioning = null;
+  /** The binary in use - self-heals to the managed copy when nothing was installed. */
+  get adbPath() {
+    return this.path;
+  }
+  /**
+   * Run a raw adb command with no device target (e.g. `devices`, `start-server`).
+   *
+   * When the binary does not exist at all, the tool provisions its own copy of
+   * platform-tools (see adbProvision.ts) and retries once, so an operator on a
+   * clean machine never has to install anything. Only when that also fails does
+   * the manual-install story surface - as words, not as "spawn adb ENOENT".
+   */
   async raw(args, timeoutMs = 3e4) {
     this.logger?.trace("adb", { args: args.join(" ") });
     try {
-      return await run(this.adbPath, args, { timeoutMs });
+      return await run(this.path, args, { timeoutMs });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      if (/ENOENT/.test(message)) {
-        throw new DeviceError("adb was not found on this machine.", {
-          hint: "Install Android platform-tools (macOS: brew install android-platform-tools; Windows: download platform-tools from developer.android.com and add it to PATH), or point GDPS_ADB_PATH at the adb binary, then press Refresh."
-        });
+      if (!/ENOENT/.test(message)) throw e;
+      try {
+        this.provisioning ??= ensureManagedAdb(this.logger);
+        this.path = await this.provisioning;
+      } catch (provisionError) {
+        this.provisioning = null;
+        const why = provisionError instanceof Error ? provisionError.message : String(provisionError);
+        throw new DeviceError(
+          `adb is not installed, and fetching Android platform-tools automatically failed: ${why}`,
+          {
+            hint: "Check the internet connection and press Refresh to retry the download. Or install platform-tools yourself (macOS: brew install android-platform-tools; Windows: download from developer.android.com), or point GDPS_ADB_PATH at an adb binary."
+          }
+        );
       }
-      throw e;
+      return run(this.path, args, { timeoutMs });
     }
   }
   async startServer() {
@@ -56426,7 +56671,7 @@ function escapeRegExp(value) {
 }
 
 // src/devices/appLabel.ts
-var import_node_zlib = require("node:zlib");
+var import_node_zlib2 = require("node:zlib");
 
 // src/apk/arsc.ts
 var RES_STRING_POOL_TYPE = 1;
@@ -56755,8 +57000,8 @@ function attr(el, name) {
 }
 
 // src/devices/appLabel.ts
-var EOCD_SIGNATURE = 101010256;
-var CENTRAL_SIGNATURE = 33639248;
+var EOCD_SIGNATURE2 = 101010256;
+var CENTRAL_SIGNATURE2 = 33639248;
 var LOCAL_SIGNATURE = 67324752;
 var TAIL_BYTES = 64 * 1024;
 var MAX_ENTRY_BYTES = 24 * 1024 * 1024;
@@ -56828,7 +57073,7 @@ async function resolveAppLabels(device, apps, opts = {}) {
 }
 function findEocd(tail) {
   for (let i = tail.length - 22; i >= 0; i--) {
-    if (tail.readUInt32LE(i) !== EOCD_SIGNATURE) continue;
+    if (tail.readUInt32LE(i) !== EOCD_SIGNATURE2) continue;
     return {
       entryCount: tail.readUInt16LE(i + 10),
       directorySize: tail.readUInt32LE(i + 12),
@@ -56842,7 +57087,7 @@ function readCentralDirectory(central, entryCount) {
   let offset = 0;
   for (let i = 0; i < entryCount; i++) {
     if (offset + 46 > central.length) break;
-    if (central.readUInt32LE(offset) !== CENTRAL_SIGNATURE) break;
+    if (central.readUInt32LE(offset) !== CENTRAL_SIGNATURE2) break;
     const compressionMethod = central.readUInt16LE(offset + 10);
     const compressedSize = central.readUInt32LE(offset + 20);
     const uncompressedSize = central.readUInt32LE(offset + 24);
@@ -56873,7 +57118,7 @@ async function readEntry(device, apkPath, entry) {
   if (entry.compressionMethod === 0) return data;
   if (entry.compressionMethod === 8) {
     try {
-      return (0, import_node_zlib.inflateRawSync)(data);
+      return (0, import_node_zlib2.inflateRawSync)(data);
     } catch {
       return null;
     }
@@ -57200,26 +57445,26 @@ function markerLabel(type, custom2) {
 }
 
 // src/intake/unityProject.ts
-var import_node_fs5 = require("node:fs");
-var import_node_path5 = require("node:path");
+var import_node_fs7 = require("node:fs");
+var import_node_path6 = require("node:path");
 var REQUIRED_DIRS = ["Assets", "ProjectSettings"];
 function validateUnityProject(root, logger2) {
   const warnings = [];
   for (const dir of REQUIRED_DIRS) {
-    if (!(0, import_node_fs5.existsSync)((0, import_node_path5.join)(root, dir))) {
+    if (!(0, import_node_fs7.existsSync)((0, import_node_path6.join)(root, dir))) {
       throw new IntakeError(`Not a Unity project: missing "${dir}/" in ${root}`, {
         hint: "The repository must contain the complete Unity project (Assets/, ProjectSettings/, Packages/, .meta files). Check whether the project lives in a subdirectory and pass it explicitly."
       });
     }
   }
-  if (!(0, import_node_fs5.existsSync)((0, import_node_path5.join)(root, "Packages"))) {
+  if (!(0, import_node_fs7.existsSync)((0, import_node_path6.join)(root, "Packages"))) {
     warnings.push("Packages/ is missing - package-level risks cannot be assessed.");
   }
   const unityVersion = readProjectVersion(root);
   const settings = readProjectSettings(root);
   const buildScenes = readBuildScenes(root);
   const packages = readPackages(root);
-  const assetsDir = (0, import_node_path5.join)(root, "Assets");
+  const assetsDir = (0, import_node_path6.join)(root, "Assets");
   const { assetCount, metaFileCount } = countAssets(assetsDir);
   if (metaFileCount === 0) {
     warnings.push(
@@ -57269,12 +57514,12 @@ function probeUnityProject(root) {
   if (!root.trim()) return blank2;
   let isDirectory = false;
   try {
-    isDirectory = (0, import_node_fs5.statSync)(root).isDirectory();
+    isDirectory = (0, import_node_fs7.statSync)(root).isDirectory();
   } catch {
     return { ...blank2, reason: "That folder does not exist." };
   }
   if (!isDirectory) return { ...blank2, reason: "That is a file, not a folder." };
-  const missing = REQUIRED_DIRS.filter((dir) => !(0, import_node_fs5.existsSync)((0, import_node_path5.join)(root, dir)));
+  const missing = REQUIRED_DIRS.filter((dir) => !(0, import_node_fs7.existsSync)((0, import_node_path6.join)(root, dir)));
   if (missing.length > 0) {
     return {
       ...blank2,
@@ -57297,21 +57542,21 @@ function probeUnityProject(root) {
   };
 }
 function readProjectVersion(root) {
-  const file = (0, import_node_path5.join)(root, "ProjectSettings", "ProjectVersion.txt");
-  if (!(0, import_node_fs5.existsSync)(file)) return null;
-  const match = /m_EditorVersion:\s*(\S+)/.exec((0, import_node_fs5.readFileSync)(file, "utf8"));
+  const file = (0, import_node_path6.join)(root, "ProjectSettings", "ProjectVersion.txt");
+  if (!(0, import_node_fs7.existsSync)(file)) return null;
+  const match = /m_EditorVersion:\s*(\S+)/.exec((0, import_node_fs7.readFileSync)(file, "utf8"));
   return match?.[1] ?? null;
 }
 function readProjectSettings(root) {
-  const file = (0, import_node_path5.join)(root, "ProjectSettings", "ProjectSettings.asset");
+  const file = (0, import_node_path6.join)(root, "ProjectSettings", "ProjectSettings.asset");
   const empty = {
     scriptingBackend: null,
     companyName: null,
     productName: null,
     bundleIdentifier: null
   };
-  if (!(0, import_node_fs5.existsSync)(file)) return empty;
-  const text = (0, import_node_fs5.readFileSync)(file, "utf8");
+  if (!(0, import_node_fs7.existsSync)(file)) return empty;
+  const text = (0, import_node_fs7.readFileSync)(file, "utf8");
   const backendBlock = /scriptingBackend:\s*\n((?:\s+\w+:\s*\d+\n)+)/.exec(text);
   let scriptingBackend = null;
   if (backendBlock?.[1]) {
@@ -57330,9 +57575,9 @@ function matchScalar(text, key) {
   return m?.[1]?.trim().replace(/^["']|["']$/g, "") ?? null;
 }
 function readBuildScenes(root) {
-  const file = (0, import_node_path5.join)(root, "ProjectSettings", "EditorBuildSettings.asset");
-  if (!(0, import_node_fs5.existsSync)(file)) return [];
-  const text = (0, import_node_fs5.readFileSync)(file, "utf8");
+  const file = (0, import_node_path6.join)(root, "ProjectSettings", "EditorBuildSettings.asset");
+  if (!(0, import_node_fs7.existsSync)(file)) return [];
+  const text = (0, import_node_fs7.readFileSync)(file, "utf8");
   const scenes = [];
   const entryRe = /-\s+enabled:\s*(\d)\s*\n\s*path:\s*(.+?)\s*\n\s*guid:\s*([0-9a-fA-F]+)?/g;
   let match;
@@ -57350,23 +57595,23 @@ function readBuildScenes(root) {
   return scenes;
 }
 function readPackages(root) {
-  const file = (0, import_node_path5.join)(root, "Packages", "manifest.json");
-  if (!(0, import_node_fs5.existsSync)(file)) return {};
+  const file = (0, import_node_path6.join)(root, "Packages", "manifest.json");
+  if (!(0, import_node_fs7.existsSync)(file)) return {};
   try {
-    const parsed = JSON.parse((0, import_node_fs5.readFileSync)(file, "utf8"));
+    const parsed = JSON.parse((0, import_node_fs7.readFileSync)(file, "utf8"));
     return parsed.dependencies ?? {};
   } catch {
     return {};
   }
 }
 function findAddressableGroups(root) {
-  const dir = (0, import_node_path5.join)(root, "Assets", "AddressableAssetsData");
-  if (!(0, import_node_fs5.existsSync)(dir)) return [];
+  const dir = (0, import_node_path6.join)(root, "Assets", "AddressableAssetsData");
+  if (!(0, import_node_fs7.existsSync)(dir)) return [];
   const out = [];
   walk(
     dir,
     (file) => {
-      if (file.endsWith(".asset")) out.push((0, import_node_path5.relative)(root, file).split(import_node_path5.sep).join("/"));
+      if (file.endsWith(".asset")) out.push((0, import_node_path6.relative)(root, file).split(import_node_path6.sep).join("/"));
     },
     3
   );
@@ -57385,16 +57630,16 @@ function walk(dir, onFile, maxDepth = 64, depth = 0) {
   if (depth > maxDepth) return;
   let entries;
   try {
-    entries = (0, import_node_fs5.readdirSync)(dir);
+    entries = (0, import_node_fs7.readdirSync)(dir);
   } catch {
     return;
   }
   for (const entry of entries) {
     if (SKIP_DIRS.has(entry)) continue;
-    const full = (0, import_node_path5.join)(dir, entry);
+    const full = (0, import_node_path6.join)(dir, entry);
     let st;
     try {
-      st = (0, import_node_fs5.statSync)(full);
+      st = (0, import_node_fs7.statSync)(full);
     } catch {
       continue;
     }
@@ -57449,165 +57694,14 @@ var FEATURES = {
 
 // src/pipeline/pipeline.ts
 var import_node_events5 = require("node:events");
-var import_node_path13 = require("node:path");
+var import_node_path14 = require("node:path");
 
 // src/apk/inspector.ts
-var import_node_fs7 = require("node:fs");
-var import_node_path6 = require("node:path");
-
-// src/apk/zip.ts
-var import_node_fs6 = require("node:fs");
-var import_node_zlib2 = require("node:zlib");
-var EOCD_SIGNATURE2 = 101010256;
-var EOCD64_LOCATOR_SIGNATURE = 117853008;
-var EOCD64_SIGNATURE = 101075792;
-var CENTRAL_SIGNATURE2 = 33639248;
-var MAX_COMMENT = 65535;
-var ZipReader = class {
-  constructor(path) {
-    this.path = path;
-    this.fileSize = (0, import_node_fs6.statSync)(path).size;
-    this.fd = (0, import_node_fs6.openSync)(path, "r");
-  }
-  path;
-  fd;
-  fileSize;
-  entriesCache = null;
-  close() {
-    if (this.fd >= 0) {
-      (0, import_node_fs6.closeSync)(this.fd);
-      this.fd = -1;
-    }
-  }
-  read(length, position) {
-    const clamped = Math.max(0, Math.min(length, this.fileSize - position));
-    const buf = Buffer.alloc(clamped);
-    if (clamped > 0) (0, import_node_fs6.readSync)(this.fd, buf, 0, clamped, position);
-    return buf;
-  }
-  /** All central-directory entries, parsed once and cached. */
-  entries() {
-    if (this.entriesCache) return this.entriesCache;
-    const { offset, count } = this.locateCentralDirectory();
-    const cd = this.read(this.fileSize - offset, offset);
-    const entries = [];
-    let pos = 0;
-    for (let i = 0; i < count && pos + 46 <= cd.length; i++) {
-      if (cd.readUInt32LE(pos) !== CENTRAL_SIGNATURE2) break;
-      const compressionMethod = cd.readUInt16LE(pos + 10);
-      const crc32 = cd.readUInt32LE(pos + 16);
-      let compressedSize = cd.readUInt32LE(pos + 20);
-      let uncompressedSize = cd.readUInt32LE(pos + 24);
-      const nameLen = cd.readUInt16LE(pos + 28);
-      const extraLen = cd.readUInt16LE(pos + 30);
-      const commentLen = cd.readUInt16LE(pos + 32);
-      let localHeaderOffset = cd.readUInt32LE(pos + 42);
-      const name = cd.subarray(pos + 46, pos + 46 + nameLen).toString("utf8");
-      const extra = cd.subarray(pos + 46 + nameLen, pos + 46 + nameLen + extraLen);
-      if (uncompressedSize === 4294967295 || compressedSize === 4294967295 || localHeaderOffset === 4294967295) {
-        const z64 = findZip64Extra(extra);
-        if (z64) {
-          let o = 0;
-          if (uncompressedSize === 4294967295 && o + 8 <= z64.length) {
-            uncompressedSize = Number(z64.readBigUInt64LE(o));
-            o += 8;
-          }
-          if (compressedSize === 4294967295 && o + 8 <= z64.length) {
-            compressedSize = Number(z64.readBigUInt64LE(o));
-            o += 8;
-          }
-          if (localHeaderOffset === 4294967295 && o + 8 <= z64.length) {
-            localHeaderOffset = Number(z64.readBigUInt64LE(o));
-          }
-        }
-      }
-      entries.push({
-        name,
-        compressedSize,
-        uncompressedSize,
-        compressionMethod,
-        crc32,
-        localHeaderOffset,
-        isDirectory: name.endsWith("/")
-      });
-      pos += 46 + nameLen + extraLen + commentLen;
-    }
-    this.entriesCache = entries;
-    return entries;
-  }
-  find(name) {
-    return this.entries().find((e) => e.name === name);
-  }
-  has(name) {
-    return this.find(name) !== void 0;
-  }
-  /** Read and decompress one entry. Returns null when it is absent. */
-  readFile(name) {
-    const entry = this.find(name);
-    if (!entry) return null;
-    return this.readEntry(entry);
-  }
-  readEntry(entry) {
-    const header = this.read(30, entry.localHeaderOffset);
-    if (header.length < 30) throw new Error(`Truncated local header for ${entry.name}`);
-    const nameLen = header.readUInt16LE(26);
-    const extraLen = header.readUInt16LE(28);
-    const dataOffset = entry.localHeaderOffset + 30 + nameLen + extraLen;
-    const raw = this.read(entry.compressedSize, dataOffset);
-    if (entry.compressionMethod === 0) return raw;
-    if (entry.compressionMethod === 8) return (0, import_node_zlib2.inflateRawSync)(raw);
-    throw new Error(`Unsupported compression method ${entry.compressionMethod} for ${entry.name}`);
-  }
-  locateCentralDirectory() {
-    const searchLen = Math.min(this.fileSize, MAX_COMMENT + 22);
-    const tail = this.read(searchLen, this.fileSize - searchLen);
-    let eocd = -1;
-    for (let i = tail.length - 22; i >= 0; i--) {
-      if (tail.readUInt32LE(i) === EOCD_SIGNATURE2) {
-        eocd = i;
-        break;
-      }
-    }
-    if (eocd < 0) throw new Error(`Not a ZIP archive (no end-of-central-directory): ${this.path}`);
-    let count = tail.readUInt16LE(eocd + 10);
-    let offset = tail.readUInt32LE(eocd + 16);
-    if (count === 65535 || offset === 4294967295) {
-      const locator = eocd - 20;
-      if (locator >= 0 && tail.readUInt32LE(locator) === EOCD64_LOCATOR_SIGNATURE) {
-        const eocd64Offset = Number(tail.readBigUInt64LE(locator + 8));
-        const eocd64 = this.read(56, eocd64Offset);
-        if (eocd64.length >= 56 && eocd64.readUInt32LE(0) === EOCD64_SIGNATURE) {
-          count = Number(eocd64.readBigUInt64LE(32));
-          offset = Number(eocd64.readBigUInt64LE(48));
-        }
-      }
-    }
-    return { offset, count };
-  }
-};
-function findZip64Extra(extra) {
-  let pos = 0;
-  while (pos + 4 <= extra.length) {
-    const id = extra.readUInt16LE(pos);
-    const size = extra.readUInt16LE(pos + 2);
-    if (id === 1) return extra.subarray(pos + 4, pos + 4 + size);
-    pos += 4 + size;
-  }
-  return null;
-}
-function withZip(path, fn) {
-  const zip = new ZipReader(path);
-  try {
-    return fn(zip);
-  } finally {
-    zip.close();
-  }
-}
-
-// src/apk/inspector.ts
+var import_node_fs8 = require("node:fs");
+var import_node_path7 = require("node:path");
 async function inspectApk(opts) {
   const { apkPath, aapt2Path, logger: logger2 } = opts;
-  if (!(0, import_node_fs7.existsSync)(apkPath)) throw new ApkError(`APK not found: ${apkPath}`);
+  if (!(0, import_node_fs8.existsSync)(apkPath)) throw new ApkError(`APK not found: ${apkPath}`);
   const info = withZip(apkPath, (zip) => inspectZip(apkPath, zip, logger2));
   if (aapt2Path) {
     const crossCheck = await aapt2Badging(aapt2Path, apkPath, logger2);
@@ -57655,7 +57749,7 @@ function inspectZip(apkPath, zip, logger2) {
   const size = entries.reduce((acc, e) => acc + e.compressedSize, 0);
   return {
     path: apkPath,
-    fileName: (0, import_node_path6.basename)(apkPath),
+    fileName: (0, import_node_path7.basename)(apkPath),
     sizeBytes: size,
     ...manifestInfo,
     launchComponent,
@@ -58035,9 +58129,9 @@ async function closePlayerConnection(device, localPort, logger2) {
 
 // src/intake/apkFetch.ts
 var import_node_crypto2 = require("node:crypto");
-var import_node_fs8 = require("node:fs");
+var import_node_fs9 = require("node:fs");
 var import_promises = require("node:fs/promises");
-var import_node_path7 = require("node:path");
+var import_node_path8 = require("node:path");
 var import_node_stream = require("node:stream");
 var import_promises2 = require("node:stream/promises");
 var ZIP_MAGIC = Buffer.from([80, 75, 3, 4]);
@@ -58045,12 +58139,12 @@ async function acquireApk(opts) {
   const { apkPath, apkUrl, destDir, logger: logger2, timeoutMs = 30 * 6e4 } = opts;
   await (0, import_promises.mkdir)(destDir, { recursive: true });
   if (apkPath) {
-    if (!(0, import_node_fs8.existsSync)(apkPath)) {
+    if (!(0, import_node_fs9.existsSync)(apkPath)) {
       throw new IntakeError(`APK not found at ${apkPath}`, {
         hint: "Pass an existing file with --apk, or use --apk-url to download one."
       });
     }
-    const dest2 = (0, import_node_path7.join)(destDir, (0, import_node_path7.basename)(apkPath));
+    const dest2 = (0, import_node_path8.join)(destDir, (0, import_node_path8.basename)(apkPath));
     if (dest2 !== apkPath) await (0, import_promises.copyFile)(apkPath, dest2);
     logger2?.info("APK taken from local path", { path: dest2 });
     return finalize(dest2, "local");
@@ -58061,14 +58155,14 @@ async function acquireApk(opts) {
     });
   }
   const url = normalizeShareUrl(apkUrl);
-  const dest = (0, import_node_path7.join)(destDir, deriveFilename(url));
+  const dest = (0, import_node_path8.join)(destDir, deriveFilename(url));
   logger2?.info("Downloading APK", { url: url.slice(0, 160) });
   await download(url, dest, timeoutMs, logger2);
   return finalize(dest, "download", apkUrl);
 }
 async function finalize(path, origin, sourceUrl) {
   await assertLooksLikeApk(path);
-  const sizeBytes = (0, import_node_fs8.statSync)(path).size;
+  const sizeBytes = (0, import_node_fs9.statSync)(path).size;
   const sha256 = await hashFile(path);
   return { path, sizeBytes, sha256, origin, ...sourceUrl ? { sourceUrl } : {} };
 }
@@ -58104,12 +58198,12 @@ async function download(url, dest, timeoutMs, logger2) {
       });
     }
     const total2 = Number(res.headers.get("content-length") ?? 0);
-    await (0, import_promises.mkdir)((0, import_node_path7.dirname)(dest), { recursive: true });
-    await (0, import_promises2.pipeline)(import_node_stream.Readable.fromWeb(res.body), (0, import_node_fs8.createWriteStream)(tmp));
+    await (0, import_promises.mkdir)((0, import_node_path8.dirname)(dest), { recursive: true });
+    await (0, import_promises2.pipeline)(import_node_stream.Readable.fromWeb(res.body), (0, import_node_fs9.createWriteStream)(tmp));
     await (0, import_promises.rm)(dest, { force: true });
     await (0, import_promises.rename)(tmp, dest);
     logger2?.info("APK downloaded", {
-      bytes: (0, import_node_fs8.statSync)(dest).size,
+      bytes: (0, import_node_fs9.statSync)(dest).size,
       declaredBytes: total2 || "unknown"
     });
   } catch (err) {
@@ -58138,7 +58232,7 @@ function normalizeShareUrl(input) {
 }
 function deriveFilename(url) {
   try {
-    const name = (0, import_node_path7.basename)(new URL(url).pathname);
+    const name = (0, import_node_path8.basename)(new URL(url).pathname);
     if (name && /\.(apk|aab)$/i.test(name)) return name;
   } catch {
   }
@@ -58146,7 +58240,7 @@ function deriveFilename(url) {
 }
 
 // src/intake/git.ts
-var import_node_fs9 = require("node:fs");
+var import_node_fs10 = require("node:fs");
 var import_promises3 = require("node:fs/promises");
 function redactUrl(url) {
   return url.replace(/\/\/[^@/]+@/, "//***@");
@@ -58168,7 +58262,7 @@ async function cloneRepository(opts) {
     logger: logger2,
     timeoutMs = 20 * 6e4
   } = opts;
-  if ((0, import_node_fs9.existsSync)(targetDir)) {
+  if ((0, import_node_fs10.existsSync)(targetDir)) {
     logger2?.debug("Clearing previous source checkout", { targetDir });
     await (0, import_promises3.rm)(targetDir, { recursive: true, force: true });
   }
@@ -58218,12 +58312,12 @@ async function cloneRepository(opts) {
 }
 
 // src/static/assetIndex.ts
-var import_node_fs12 = require("node:fs");
-var import_node_path9 = require("node:path");
+var import_node_fs13 = require("node:fs");
+var import_node_path10 = require("node:path");
 
 // src/static/imageInfo.ts
-var import_node_fs10 = require("node:fs");
-var import_node_path8 = require("node:path");
+var import_node_fs11 = require("node:fs");
+var import_node_path9 = require("node:path");
 var SUPPORTED = /* @__PURE__ */ new Set([
   ".png",
   ".jpg",
@@ -58238,18 +58332,18 @@ var SUPPORTED = /* @__PURE__ */ new Set([
   ".webp"
 ]);
 function isImageFile(path) {
-  return SUPPORTED.has((0, import_node_path8.extname)(path).toLowerCase());
+  return SUPPORTED.has((0, import_node_path9.extname)(path).toLowerCase());
 }
 function readImageDimensions(path) {
-  const ext = (0, import_node_path8.extname)(path).toLowerCase();
+  const ext = (0, import_node_path9.extname)(path).toLowerCase();
   if (!SUPPORTED.has(ext)) return null;
   let fd = null;
   try {
-    const size = (0, import_node_fs10.statSync)(path).size;
+    const size = (0, import_node_fs11.statSync)(path).size;
     if (size < 16) return null;
-    fd = (0, import_node_fs10.openSync)(path, "r");
+    fd = (0, import_node_fs11.openSync)(path, "r");
     const head = Buffer.alloc(Math.min(size, 4096));
-    (0, import_node_fs10.readSync)(fd, head, 0, head.length, 0);
+    (0, import_node_fs11.readSync)(fd, head, 0, head.length, 0);
     switch (ext) {
       case ".png":
         return readPng(head);
@@ -58275,7 +58369,7 @@ function readImageDimensions(path) {
   } catch {
     return null;
   } finally {
-    if (fd !== null) (0, import_node_fs10.closeSync)(fd);
+    if (fd !== null) (0, import_node_fs11.closeSync)(fd);
   }
 }
 function readPng(buf) {
@@ -58314,7 +58408,7 @@ function pngChannels(colorType) {
 }
 function readJpeg(fd, fileSize) {
   const chunk = Buffer.alloc(Math.min(fileSize, 512 * 1024));
-  (0, import_node_fs10.readSync)(fd, chunk, 0, chunk.length, 0);
+  (0, import_node_fs11.readSync)(fd, chunk, 0, chunk.length, 0);
   if (chunk.readUInt16BE(0) !== 65496) return null;
   let pos = 2;
   while (pos + 9 < chunk.length) {
@@ -58420,11 +58514,11 @@ function readWebp(buf) {
 }
 
 // src/static/unityYaml.ts
-var import_node_fs11 = require("node:fs");
+var import_node_fs12 = require("node:fs");
 var import_yaml = __toESM(require_dist5(), 1);
 function parseMetaFile(path) {
   try {
-    const text = (0, import_node_fs11.readFileSync)(path, "utf8");
+    const text = (0, import_node_fs12.readFileSync)(path, "utf8");
     return parseMetaText(text);
   } catch {
     return null;
@@ -58441,7 +58535,7 @@ function parseMetaText(text) {
 function readUnityDocuments(path, maxBytes = 24 * 1024 * 1024) {
   let text;
   try {
-    text = (0, import_node_fs11.readFileSync)(path, "utf8");
+    text = (0, import_node_fs12.readFileSync)(path, "utf8");
   } catch {
     return [];
   }
@@ -58538,7 +58632,7 @@ var EXT_KIND = [
 ];
 var NOT_SHIPPED_PATH = /(^|\/)(Editor|Editor Default Resources|Gizmos)(\/|$)/i;
 function classifyAsset(path) {
-  const name = (0, import_node_path9.basename)(path);
+  const name = (0, import_node_path10.basename)(path);
   if (/lightmap/i.test(name) && /\.(exr|png)$/i.test(name)) return "lightmap";
   for (const [re, kind] of EXT_KIND) {
     if (re.test(name)) return kind;
@@ -58548,14 +58642,14 @@ function classifyAsset(path) {
 function buildAssetIndex(opts) {
   const started = Date.now();
   const { projectRoot, logger: logger2 } = opts;
-  const assetsDir = (0, import_node_path9.join)(projectRoot, "Assets");
+  const assetsDir = (0, import_node_path10.join)(projectRoot, "Assets");
   const assets = [];
   const byGuid = /* @__PURE__ */ new Map();
   let unparsedMetaCount = 0;
   let editorOnlyExcluded = 0;
   walk(assetsDir, (filePath) => {
     if (filePath.endsWith(".meta")) return;
-    const relForCheck = (0, import_node_path9.relative)(projectRoot, filePath).split(import_node_path9.sep).join("/");
+    const relForCheck = (0, import_node_path10.relative)(projectRoot, filePath).split(import_node_path10.sep).join("/");
     if (NOT_SHIPPED_PATH.test(relForCheck)) {
       editorOnlyExcluded++;
       return;
@@ -58563,7 +58657,7 @@ function buildAssetIndex(opts) {
     const kind = classifyAsset(filePath);
     let fileSizeBytes = 0;
     try {
-      fileSizeBytes = (0, import_node_fs12.statSync)(filePath).size;
+      fileSizeBytes = (0, import_node_fs13.statSync)(filePath).size;
     } catch {
       return;
     }
@@ -58572,9 +58666,9 @@ function buildAssetIndex(opts) {
     if (!meta) unparsedMetaCount++;
     const record = {
       path: filePath,
-      relPath: (0, import_node_path9.relative)(projectRoot, filePath).split(import_node_path9.sep).join("/"),
-      name: (0, import_node_path9.basename)(filePath),
-      ext: (0, import_node_path9.extname)(filePath).toLowerCase(),
+      relPath: (0, import_node_path10.relative)(projectRoot, filePath).split(import_node_path10.sep).join("/"),
+      name: (0, import_node_path10.basename)(filePath),
+      ext: (0, import_node_path10.extname)(filePath).toLowerCase(),
       kind,
       fileSizeBytes,
       guid: meta ? getString(meta, "guid") ?? null : null
@@ -58778,8 +58872,8 @@ var AUDIO_LOAD_TYPE_NAMES = {
 };
 
 // src/static/codeIndex.ts
-var import_node_fs13 = require("node:fs");
-var import_node_path10 = require("node:path");
+var import_node_fs14 = require("node:fs");
+var import_node_path11 = require("node:path");
 var EDITOR_ONLY_PATH = /(^|\/)(Editor|Editor Default Resources|Gizmos)(\/|$)/i;
 var GENERATED_PATH = /(^|\/)Generated(\/|$)|\.g\.cs$|\.designer\.cs$/i;
 var THIRD_PARTY_PATH = /(^|\/)(Plugins|ThirdParty|Third Party|MaxSdk|GoogleMobileAds|Firebase|FacebookSDK|AppLovin|UnityAds|IronSource|Adjust|AppsFlyer|Photon|PlayServicesResolver|ExternalDependencyManager)(\/|$)/i;
@@ -58797,7 +58891,7 @@ function buildCodeIndex(opts) {
       skipped++;
       return;
     }
-    const relPath = (0, import_node_path10.relative)(opts.projectRoot, filePath).split(import_node_path10.sep).join("/");
+    const relPath = (0, import_node_path11.relative)(opts.projectRoot, filePath).split(import_node_path11.sep).join("/");
     if (EDITOR_ONLY_PATH.test(relPath)) {
       editorOnlyExcluded++;
       return;
@@ -58808,7 +58902,7 @@ function buildCodeIndex(opts) {
     }
     let sizeBytes = 0;
     try {
-      sizeBytes = (0, import_node_fs13.statSync)(filePath).size;
+      sizeBytes = (0, import_node_fs14.statSync)(filePath).size;
     } catch {
       return;
     }
@@ -58818,7 +58912,7 @@ function buildCodeIndex(opts) {
     }
     let original;
     try {
-      original = (0, import_node_fs13.readFileSync)(filePath, "utf8");
+      original = (0, import_node_fs14.readFileSync)(filePath, "utf8");
     } catch {
       skipped++;
       return;
@@ -60004,8 +60098,8 @@ var CODE_RULES = [
 ];
 
 // src/static/sceneIndex.ts
-var import_node_fs14 = require("node:fs");
-var import_node_path11 = require("node:path");
+var import_node_fs15 = require("node:fs");
+var import_node_path12 = require("node:path");
 var GUID_RE = /guid:\s*([0-9a-f]{32})/g;
 var OBJECT_HEADER_RE = /^---\s*!u!(\d+)\s*&\d+/gm;
 function buildSceneIndex(opts) {
@@ -60023,11 +60117,11 @@ function buildSceneIndex(opts) {
     const isPrefab = filePath.endsWith(".prefab");
     if (!isScene && !isPrefab) return;
     if (isPrefab && prefabs.length >= maxPrefabs) return;
-    const relPath = normalize((0, import_node_path11.relative)(opts.projectRoot, filePath).split(import_node_path11.sep).join("/"));
+    const relPath = normalize((0, import_node_path12.relative)(opts.projectRoot, filePath).split(import_node_path12.sep).join("/"));
     const build = buildLookup.get(relPath);
     let fileSizeBytes = 0;
     try {
-      fileSizeBytes = (0, import_node_fs14.statSync)(filePath).size;
+      fileSizeBytes = (0, import_node_fs15.statSync)(filePath).size;
     } catch {
       return;
     }
@@ -60049,7 +60143,7 @@ function buildSceneIndex(opts) {
     };
     if (!record.truncated) {
       try {
-        analyzeFile((0, import_node_fs14.readFileSync)(filePath, "utf8"), record, opts.assets);
+        analyzeFile((0, import_node_fs15.readFileSync)(filePath, "utf8"), record, opts.assets);
       } catch {
         record.truncated = true;
       }
@@ -60209,8 +60303,8 @@ function buildSummary(project, assets, code, scenes) {
 var import_node_events4 = require("node:events");
 
 // src/core/jsonl.ts
-var import_node_fs15 = require("node:fs");
-var import_node_path12 = require("node:path");
+var import_node_fs16 = require("node:fs");
+var import_node_path13 = require("node:path");
 var import_node_readline = require("node:readline");
 var JsonlWriter = class {
   constructor(path) {
@@ -60221,8 +60315,8 @@ var JsonlWriter = class {
   count = 0;
   open() {
     if (!this.stream) {
-      (0, import_node_fs15.mkdirSync)((0, import_node_path12.dirname)(this.path), { recursive: true });
-      this.stream = (0, import_node_fs15.createWriteStream)(this.path, { flags: "a" });
+      (0, import_node_fs16.mkdirSync)((0, import_node_path13.dirname)(this.path), { recursive: true });
+      this.stream = (0, import_node_fs16.createWriteStream)(this.path, { flags: "a" });
     }
     return this.stream;
   }
@@ -60242,8 +60336,8 @@ var JsonlWriter = class {
   }
 };
 async function* readJsonl(path) {
-  if (!(0, import_node_fs15.existsSync)(path)) return;
-  const rl = (0, import_node_readline.createInterface)({ input: (0, import_node_fs15.createReadStream)(path), crlfDelay: Infinity });
+  if (!(0, import_node_fs16.existsSync)(path)) return;
+  const rl = (0, import_node_readline.createInterface)({ input: (0, import_node_fs16.createReadStream)(path), crlfDelay: Infinity });
   for await (const line of rl) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -69632,7 +69726,7 @@ var AnalysisPipeline = class extends import_node_events5.EventEmitter {
           this.clone = await cloneRepository({
             repoUrl: this.opts.input.repoUrl,
             branch: this.opts.input.branch,
-            targetDir: (0, import_node_path13.join)(this.job.workspace.dir("source"), "repo"),
+            targetDir: (0, import_node_path14.join)(this.job.workspace.dir("source"), "repo"),
             githubToken: this.config.githubToken,
             logger: log2.child("git")
           });
@@ -73397,7 +73491,7 @@ footer p { margin: 0; }
 `;
 
 // src/server/nativeDialog.ts
-var import_node_path14 = require("node:path");
+var import_node_path15 = require("node:path");
 var DIALOG_TIMEOUT_MS = 5 * 6e4;
 async function pickPath(opts) {
   try {
@@ -73512,7 +73606,7 @@ async function revealInFileManager(target, logger2) {
         await run("open", ["-R", target], { timeoutMs: 15e3 });
         return true;
       default:
-        await run("xdg-open", [(0, import_node_path14.dirname)(target)], { timeoutMs: 15e3 });
+        await run("xdg-open", [(0, import_node_path15.dirname)(target)], { timeoutMs: 15e3 });
         return true;
     }
   } catch (err) {
@@ -73524,9 +73618,9 @@ async function revealInFileManager(target, logger2) {
 }
 
 // src/server/uiAssets.ts
-var import_node_fs16 = require("node:fs");
+var import_node_fs17 = require("node:fs");
 var import_node_module = require("node:module");
-var import_node_path15 = require("node:path");
+var import_node_path16 = require("node:path");
 var import_node_url = require("node:url");
 var import_meta = {};
 var UI_FILES = ["index.html", "app.js", "naming.js", "chart.js", "styles.css"];
@@ -73566,22 +73660,22 @@ function isPackagedExecutable() {
 function resolveUiDir() {
   if (isPackagedExecutable()) return null;
   const override = env("UI_DIR");
-  if (override && (0, import_node_fs16.existsSync)((0, import_node_path15.join)(override, "index.html"))) return override;
+  if (override && (0, import_node_fs17.existsSync)((0, import_node_path16.join)(override, "index.html"))) return override;
   const moduleUrl = import_meta.url;
   if (!moduleUrl) return null;
   let here;
   try {
-    here = (0, import_node_path15.dirname)((0, import_node_url.fileURLToPath)(moduleUrl));
+    here = (0, import_node_path16.dirname)((0, import_node_url.fileURLToPath)(moduleUrl));
   } catch {
     return null;
   }
   const candidates = [
-    (0, import_node_path15.join)(here, "..", "ui"),
+    (0, import_node_path16.join)(here, "..", "ui"),
     // dist/server -> dist/ui
-    (0, import_node_path15.join)(here, "..", "..", "src", "ui")
+    (0, import_node_path16.join)(here, "..", "..", "src", "ui")
     // dist/server -> src/ui (dev build in-tree)
   ];
-  return candidates.find((dir) => (0, import_node_fs16.existsSync)((0, import_node_path15.join)(dir, "index.html"))) ?? null;
+  return candidates.find((dir) => (0, import_node_fs17.existsSync)((0, import_node_path16.join)(dir, "index.html"))) ?? null;
 }
 function readUiAsset(name) {
   const cached2 = cache.get(name);
@@ -73609,10 +73703,10 @@ function readEmbedded(name) {
 function readFromDisk(name) {
   const dir = resolveUiDir();
   if (!dir) return null;
-  const path = (0, import_node_path15.join)(dir, name);
-  if (!(0, import_node_fs16.existsSync)(path)) return null;
+  const path = (0, import_node_path16.join)(dir, name);
+  if (!(0, import_node_fs17.existsSync)(path)) return null;
   try {
-    return (0, import_node_fs16.readFileSync)(path);
+    return (0, import_node_fs17.readFileSync)(path);
   } catch {
     return null;
   }
@@ -73896,7 +73990,7 @@ async function createServer() {
       ["Unity project folder", body.projectPath],
       ["APK file", body.apkPath]
     ]) {
-      if (path && !(0, import_node_fs17.existsSync)(path)) {
+      if (path && !(0, import_node_fs18.existsSync)(path)) {
         return reply.status(400).send({ error: `${label} does not exist: ${path}` });
       }
     }
@@ -74023,10 +74117,10 @@ async function createServer() {
   app.get("/api/analysis/:id/report", async (req, reply) => {
     const pipeline2 = pipelines.get(req.params.id);
     const path = pipeline2?.state.reportPaths.json;
-    if (!path || !(0, import_node_fs17.existsSync)(path)) {
+    if (!path || !(0, import_node_fs18.existsSync)(path)) {
       return reply.status(404).send({ error: "No report has been generated yet" });
     }
-    return JSON.parse((0, import_node_fs17.readFileSync)(path, "utf8"));
+    return JSON.parse((0, import_node_fs18.readFileSync)(path, "utf8"));
   });
   app.get("/api/analysis/:id/report.md", async (req, reply) => {
     const pipeline2 = pipelines.get(req.params.id);
@@ -74034,10 +74128,10 @@ async function createServer() {
     if (!paths) return reply.status(404).send({ error: "Unknown analysis id" });
     const requested = req.query.audience ?? "complete";
     const path = paths.byAudience?.[requested] ?? paths.markdown;
-    if (!path || !(0, import_node_fs17.existsSync)(path)) {
+    if (!path || !(0, import_node_fs18.existsSync)(path)) {
       return reply.status(404).send({ error: "No report has been generated yet" });
     }
-    return reply.type("text/markdown; charset=utf-8").send((0, import_node_fs17.readFileSync)(path, "utf8"));
+    return reply.type("text/markdown; charset=utf-8").send((0, import_node_fs18.readFileSync)(path, "utf8"));
   });
   app.get("/api/analysis/:id/report.html", async (req, reply) => {
     const pipeline2 = pipelines.get(req.params.id);
@@ -74121,9 +74215,9 @@ async function startServer(port, host) {
 }
 function loadStoredReport(pipeline2) {
   const path = pipeline2?.state.reportPaths.json;
-  if (!path || !(0, import_node_fs17.existsSync)(path)) return null;
+  if (!path || !(0, import_node_fs18.existsSync)(path)) return null;
   try {
-    return JSON.parse((0, import_node_fs17.readFileSync)(path, "utf8"));
+    return JSON.parse((0, import_node_fs18.readFileSync)(path, "utf8"));
   } catch {
     return null;
   }

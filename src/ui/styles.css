@@ -1381,3 +1381,55 @@ select:disabled { opacity: 0.55; }
   font-weight: 700;
   text-align: center;
 }
+
+/* ---------------------------------------------------------------------------
+   Incident feed
+   ---------------------------------------------------------------------------
+   The curated live feed: only moments worth a marker. Severity is carried by
+   the badge, the time is a chip the operator can read against the clock, and
+   the newest incident is on top because that is the one they just felt.
+   --------------------------------------------------------------------------- */
+
+.incident-feed {
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+}
+.incident-empty { padding: 8px 2px; }
+.incident {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 12.5px;
+}
+.incident.bad { border-left-color: var(--bad); }
+.incident.info { border-left-color: var(--device-b); }
+.incident .t {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 11.5px;
+  flex-shrink: 0;
+  width: 42px;
+}
+.incident .badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: var(--accent-ink);
+  background: var(--warn);
+}
+.incident.bad .badge { background: var(--bad); color: #fff; }
+.incident.info .badge { background: var(--device-b); color: var(--accent-ink); }
+.incident .what { flex: 1; min-width: 0; }
+.incident .role-chip { color: var(--muted); font-size: 11px; flex-shrink: 0; }

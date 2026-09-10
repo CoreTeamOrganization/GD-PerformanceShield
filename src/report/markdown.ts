@@ -15,6 +15,7 @@
  */
 import { FEATURES } from '../core/features.js';
 import { renderFpsChartSvg } from './fpsChartSvg.js';
+import { renderFrametimeHistogramSvg } from './frametimeHistogramSvg.js';
 import { buildAllEventTimelines } from './eventTimeline.js';
 import { CONFIDENCE_LABEL, CONFIDENCE_MEANING, type ConfidenceLevel } from '../analysis/confidence.js';
 import { renderTimelineLegend, renderTimelineSvg } from './timelineSvg.js';
@@ -316,6 +317,8 @@ function renderSnapshot(w: Write, report: AnalysisReport): void {
   }
   w();
 
+  renderPreviousRun(w, report);
+
   w('## Device and session');
   w();
   w(`- **Device** — ${snap.device ?? 'No device measured'}`);
@@ -387,8 +390,56 @@ function renderVerdict(w: Write, report: AnalysisReport, isLead: boolean): void 
   w();
 }
 
+/**
+ * The five-line answer to "did the update make it better?", rendered wherever
+ * a report has a previous run to stand against. The full comparison remains a
+ * separate command; this is the part every reader needs without asking.
+ */
+function renderPreviousRun(w: Write, report: AnalysisReport): void {
+  const p = report.previousRun;
+  if (!p) return;
+
+  w('## Compared with the previous run');
+  w();
+  w(
+    `Against \`${p.analysisId}\`` +
+      (p.when ? ` from ${p.when.slice(0, 10)}` : '') +
+      (p.device ? ` on ${p.device}` : '') +
+      '.',
+  );
+  w();
+
+  if (p.blocked) {
+    // The gates refused a verdict - say why instead of showing numbers that
+    // would be believed over the sentence beside them.
+    for (const c of p.caveats) w(`> ${c}`);
+    w();
+    return;
+  }
+
+  const word: Record<string, string> = {
+    improved: '**better**',
+    regressed: '**worse**',
+    unchanged: 'same',
+    inconclusive: 'within noise',
+    unknown: '—',
+  };
+  w('| Figure | Previous | This run | Verdict |');
+  w('|---|---|---|---|');
+  for (const r of p.rows) {
+    w(`| ${r.label} | ${r.before ?? '—'} | ${r.after ?? '—'} | ${word[r.direction] ?? '—'} |`);
+  }
+  w();
+  for (const c of p.caveats) {
+    w(`*${c}*`);
+    w();
+  }
+}
+
 function renderDevices(w: Write, report: AnalysisReport, isLead: boolean): void {
   if (report.devices.length === 0) return;
+
+  renderPreviousRun(w, report);
 
   w('## Device results');
   w();
@@ -1438,6 +1489,28 @@ function renderFpsChart(w: Write, report: AnalysisReport): void {
         'one event and not two.*',
     );
     w();
+
+    // The distribution behind the curve. Two sessions can share an average and
+    // have nothing else in common; the histogram is where that shows.
+    const histogram = d.fps?.frameBuckets
+      ? renderFrametimeHistogramSvg({
+          buckets: d.fps.frameBuckets,
+          displayHz: d.fps.displayHz,
+          forPrint: false,
+        })
+      : '';
+    if (histogram) {
+      w('### Frame times');
+      w();
+      w(histogram);
+      w();
+      w(
+        '*Every frame in the session by how long it took (both axes logarithmic). A healthy game ' +
+          'is one tall bar at its target interval; bars past the 83 ms line are the janks counted ' +
+          'above, and anything past 125 ms was a visible freeze.*',
+      );
+      w();
+    }
   }
 }
 

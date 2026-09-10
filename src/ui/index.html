@@ -272,6 +272,24 @@
 
         <div id="fps-timelines"></div>
 
+        <h3>Incidents</h3>
+        <!--
+          The curated feed: freezes, collapses, memory jumps and process deaths
+          the moment they happen - while the operator still remembers what they
+          just did. The session log below keeps everything; this keeps only what
+          deserves a marker.
+        -->
+        <p class="hint">
+          When something lands here, press the matching marker below — that is what lets the
+          report tie the moment to what you were doing.
+        </p>
+        <div id="incident-feed" class="incident-feed">
+          <div class="incident-empty muted small">
+            Nothing yet. Freezes, frame-rate collapses, memory jumps and kills appear here the
+            moment they happen.
+          </div>
+        </div>
+
         <h3>Event markers</h3>
         <!--
           Repeat mode. A comparison joins two sessions by marked screen, so two

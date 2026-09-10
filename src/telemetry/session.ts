@@ -148,6 +148,8 @@ export interface LiveStatus {
     fpsMedian: number | null;
     /** Janks counted so far this session. */
     janks: number;
+    /** Longest frame in the last window (ms) - feeds the live incident feed. */
+    worstFrameMs: number | null;
     /** True when the app is tracking the panel - a frame cap is not applying. */
     fpsMatchesDisplayRate: boolean | null;
     /** How frame rate is being measured on this device. */
@@ -497,6 +499,10 @@ export class CaptureSession extends EventEmitter {
           // Cumulative, so the operator sees stutter accumulate rather than only
           // whatever happened in the last five seconds.
           janks: r.fpsSeries.reduce((sum, p) => sum + p.janks, 0),
+          worstFrameMs:
+            r.fpsReadings.at(-1)?.frames?.longestFrameMs ??
+            r.fpsReadings.at(-1)?.worstFrameMs ??
+            null,
           fpsMatchesDisplayRate: r.fpsReadings.at(-1)?.matchesDisplayRate ?? null,
           fpsSource: r.sampler.frameRateSource,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,

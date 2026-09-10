@@ -15,6 +15,7 @@
  */
 import { FEATURES } from '../core/features.js';
 import { renderFpsChartSvg } from './fpsChartSvg.js';
+import { renderFrametimeHistogramSvg } from './frametimeHistogramSvg.js';
 import { renderTimelineLegend, renderTimelineSvg } from './timelineSvg.js';
 import { RATING_BASIS, RATING_LABEL, rateJanks } from '../telemetry/deviceHealth.js';
 import { relativeJankNote } from '../telemetry/fps.js';
@@ -94,6 +95,7 @@ export function renderPrintableHtml(
   than being forced onto page boundaries, so no page is left half empty.
 -->
 ${renderSummary(report, audience)}
+${renderPreviousRun(report)}
 ${isLead ? renderLeadFindings(report) : renderDetailedFindings(report, isComplete)}
 ${renderRuntimeHealth(report, audience)}
 ${isLead ? '' : renderFrameRate(report, audience)}
@@ -974,9 +976,26 @@ function renderFpsChart(report: AnalysisReport): string {
       });
       if (!svg) return '';
 
+      // The distribution behind the curve, on the same footing as the curve
+      // itself: two sessions can share an average and have nothing else in
+      // common, and the histogram is where that shows.
+      const histogram = d.fps?.frameBuckets
+        ? renderFrametimeHistogramSvg({
+            buckets: d.fps.frameBuckets,
+            displayHz: d.fps.displayHz,
+            forPrint: true,
+          })
+        : '';
+
       return (
         (report.devices.length > 1 ? `<h3>Device ${esc(d.role)} — ${esc(d.model)}</h3>` : '') +
-        `<div class="chart">${svg}</div>`
+        `<div class="chart">${svg}</div>` +
+        (histogram
+          ? `<h3>Frame times</h3><div class="chart">${histogram}</div>
+  <p class="caption">Every frame in the session by how long it took (both axes logarithmic). A
+  healthy game is one tall bar at its target interval; bars past the 83 ms line are the janks
+  counted above, and anything past 125 ms was a visible freeze.</p>`
+          : '')
       );
     })
     .join('');
@@ -1147,6 +1166,52 @@ function renderVerdict(report: AnalysisReport, isLead: boolean): string {
     </tbody>
   </table>
 </section>`;
+}
+
+/**
+ * The five-line answer to "did the update make it better?", right after the
+ * summary. The full comparison stays behind the compare command; every reader
+ * gets this much without asking.
+ */
+function renderPreviousRun(report: AnalysisReport): string {
+  const p = report.previousRun;
+  if (!p) return '';
+
+  const header =
+    `<h2>Compared with the previous run</h2>` +
+    `<p class="caption">Against <code>${esc(p.analysisId)}</code>` +
+    (p.when ? ` from ${esc(p.when.slice(0, 10))}` : '') +
+    (p.device ? ` on ${esc(p.device)}` : '') +
+    '.</p>';
+
+  if (p.blocked) {
+    // The gates refused a verdict - say why instead of showing numbers the
+    // reader would believe over the sentence beside them.
+    return `<section>${header}${p.caveats.map((c) => `<p class="caption">${esc(c)}</p>`).join('')}</section>`;
+  }
+
+  const word: Record<string, string> = {
+    improved: '<span class="good">better</span>',
+    regressed: '<span class="bad">worse</span>',
+    unchanged: 'same',
+    inconclusive: 'within noise',
+    unknown: '&mdash;',
+  };
+  const rows = p.rows
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.label)}</td><td class="num">${r.before ?? '&mdash;'}</td>` +
+        `<td class="num">${r.after ?? '&mdash;'}</td><td>${word[r.direction] ?? '&mdash;'}</td></tr>`,
+    )
+    .join('');
+  const caveats = p.caveats.map((c) => `<p class="caption">${esc(c)}</p>`).join('');
+
+  return `<section>${header}
+  <table class="bordered">
+    <thead><tr><th>Figure</th><th class="num">Previous</th><th class="num">This run</th><th>Verdict</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${caveats}</section>`;
 }
 
 function renderDevices(report: AnalysisReport, isLead: boolean): string {

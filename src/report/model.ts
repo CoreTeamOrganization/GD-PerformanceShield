@@ -401,6 +401,14 @@ export const reportSchema = z.object({
             })
             .nullable()
             .optional(),
+          /**
+           * The merged frame-interval histogram, for the frame-time chart.
+           * Optional: older stored reports do not carry it.
+           */
+          frameBuckets: z
+            .array(z.object({ ms: z.number(), count: z.number() }))
+            .nullable()
+            .optional(),
           sampleCount: z.number(),
           jankPercent: z.number().nullable(),
           worstFrameMs: z.number().nullable(),
@@ -777,6 +785,35 @@ export const reportSchema = z.object({
     .optional(),
 
   artifacts: z.array(z.object({ kind: z.string(), path: z.string(), description: z.string() })),
+
+  /**
+   * The headline delta against this game's previous analysis, attached
+   * automatically when one exists in the workspace. "Did the update make it
+   * better?" is the first question every reader asks; this answers it without
+   * anyone having to run the compare command. Optional: the first run of a
+   * game has nothing to compare against, and older reports predate the field.
+   */
+  previousRun: z
+    .object({
+      analysisId: z.string(),
+      /** When the previous run happened, for "compared against what". */
+      when: z.string().nullable(),
+      device: z.string().nullable(),
+      /** True when the comparison gates refused a verdict (e.g. different hardware). */
+      blocked: z.boolean(),
+      caveats: z.array(z.string()),
+      rows: z.array(
+        z.object({
+          label: z.string(),
+          before: z.number().nullable(),
+          after: z.number().nullable(),
+          direction: z.enum(['improved', 'regressed', 'unchanged', 'inconclusive', 'unknown']),
+          note: z.string().optional(),
+        }),
+      ),
+    })
+    .nullable()
+    .optional(),
 
   /** Everything the run could not do, stated plainly. */
   limitations: z.array(z.string()),

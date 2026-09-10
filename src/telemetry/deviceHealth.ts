@@ -623,6 +623,11 @@ export interface FpsSummary {
   lowPercentileFps: number | null;
   /** The whole ladder, for reading against a cap rather than against 60. */
   percentiles: FpsPercentiles | null;
+  /**
+   * The session's merged frame-interval histogram - the raw distribution the
+   * jank counts are derived from, carried so the report can draw it.
+   */
+  frameBuckets: Array<{ ms: number; count: number }> | null;
   sampleCount: number;
   jankPercent: number | null;
   worstFrameMs: number | null;
@@ -681,6 +686,7 @@ export function summarizeFps(
       stabilityPercent: null,
       lowPercentileFps: null,
       percentiles: null,
+      frameBuckets: null,
       sampleCount: 0,
       jankPercent: null,
       worstFrameMs: null,
@@ -858,6 +864,7 @@ export function summarizeFps(
             p99: at(0.99),
           }
         : null,
+    frameBuckets: session && session.buckets.length > 0 ? session.buckets : null,
     sampleCount: readings.length,
     jankPercent:
       jankSamples.length > 0

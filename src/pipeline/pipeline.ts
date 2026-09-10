@@ -45,6 +45,7 @@ import { analyzeFlows, type DeviceFlowAnalysis, type ScreenVisit } from '../anal
 import { score, type ScoringResult } from '../analysis/scoring.js';
 import { loadTimeline, type SessionTimeline } from '../analysis/timeline.js';
 import { buildReport } from '../report/build.js';
+import { attachPreviousRun } from '../report/previousRun.js';
 import { renderAllAudiences } from '../report/markdown.js';
 import { safeValidateReport, type AnalysisReport } from '../report/model.js';
 
@@ -681,6 +682,10 @@ export class AnalysisPipeline extends EventEmitter {
         artifacts: this.collectArtifacts(),
         extraLimitations: this.collectLimitations(),
       });
+
+      // The five-line "did the update make it better?" block, when an earlier
+      // run of this game exists. Incapable of failing the run by design.
+      attachPreviousRun(report, this.config, log);
 
       const validation = safeValidateReport(report);
       if (!validation.ok) {

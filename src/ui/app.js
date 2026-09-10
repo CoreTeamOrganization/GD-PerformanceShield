@@ -112,6 +112,15 @@ const state = {
   fpsHover: new Map(),
   /** Last cumulative jank count seen, so per-sample deltas can be derived. */
   janksSeenByRole: new Map(),
+  /**
+   * The incident feed: freezes, collapses, memory jumps and deaths, surfaced
+   * the moment they happen - while the operator still remembers what they just
+   * did and can press a marker. Newest first, deduplicated by `incidentSeen`.
+   */
+  incidents: [],
+  incidentSeen: new Set(),
+  /** role -> elapsedMs of the last reported fps collapse, to rate-limit. */
+  lastDropAtByRole: new Map(),
   panels: new Map(),
   /** role -> detected memory events */
   memoryEvents: new Map(),
@@ -827,6 +836,20 @@ function onSample(sample) {
         minDeltaBytes: Math.max(20 * MB, (device?.totalRamBytes ?? 0) * 0.01),
       }),
     );
+
+    // Growth steps feed the incident feed as they are detected. Releases stay
+    // off it - memory coming back is the good case, not something to react to.
+    for (const event of state.memoryEvents.get(role) ?? []) {
+      if (event.delta <= 0) continue;
+      addIncident(
+        `mem:${role}:${event.elapsedMs}`,
+        event.elapsedMs,
+        role,
+        'memory',
+        event.delta >= 400 * MB ? 'bad' : 'warn',
+        `Memory jumped +${(event.delta / MB).toFixed(0)} MB (${event.kind ?? 'growth'})`,
+      );
+    }
   }
 
   // Bound memory on long sessions by thinning the older half of the fast series.
@@ -842,6 +865,16 @@ function onEvent(event) {
   state.events.push(event);
   const danger = ['process_gone', 'process_killed', 'process_crash', 'probe_lost'].includes(event.type);
   appendLog(event.elapsedMs, event.label, danger ? 'danger' : event.source === 'system' ? 'system' : '');
+  if (danger) {
+    addIncident(
+      `evt:${event.type}:${event.elapsedMs}`,
+      event.elapsedMs,
+      event.role ?? null,
+      event.type === 'probe_lost' ? 'probe' : 'process',
+      event.type === 'probe_lost' ? 'info' : 'bad',
+      event.label,
+    );
+  }
   drawChart();
 }
 
@@ -853,6 +886,83 @@ function onLog(entry) {
 
   if (entry.category !== 'oom_kill' && entry.category !== 'crash') return;
   appendLog(entry.elapsedMs, `[${entry.tag}] ${entry.message.slice(0, 120)}`, 'danger');
+}
+
+/**
+ * Add one row to the incident feed.
+ *
+ * `key` deduplicates - status messages repeat and reconnects replay - and the
+ * feed is capped so a four-hour soak session cannot grow it without bound.
+ */
+function addIncident(key, elapsedMs, role, kind, severity, text) {
+  if (state.incidentSeen.has(key)) return;
+  state.incidentSeen.add(key);
+  state.incidents.unshift({ elapsedMs, role, kind, severity, text });
+  if (state.incidents.length > 60) state.incidents.pop();
+  renderIncidents();
+}
+
+function renderIncidents() {
+  const feed = $('incident-feed');
+  if (!feed) return;
+  if (state.incidents.length === 0) return;
+  feed.innerHTML = state.incidents
+    .map(
+      (i) =>
+        `<div class="incident ${i.severity}">` +
+        `<span class="t">${formatDuration(i.elapsedMs)}</span>` +
+        `<span class="badge">${i.kind}</span>` +
+        `<span class="what">${escapeHtml(i.text)}</span>` +
+        (i.role ? `<span class="role-chip">Device ${escapeHtml(i.role)}</span>` : '') +
+        `</div>`,
+    )
+    .join('');
+}
+
+/**
+ * Live incident detection over the per-second frame-rate stream.
+ *
+ * Two rules, both conservative on purpose - a feed that cries wolf gets
+ * ignored, and then nobody presses the marker that makes a finding attributable:
+ *
+ *  - a freeze: the window's longest frame crossed 400 ms, which is a hitch a
+ *    player unambiguously felt.
+ *  - a collapse: the rate fell to half of what the game was recently holding.
+ *    Judged against the recent median so a steady-30 game is not flagged, and
+ *    rate-limited so one bad stretch reads as one incident, not ten.
+ */
+function detectFpsIncidents(role, elapsedMs, device, series) {
+  const worst = device.worstFrameMs;
+  if (worst != null && worst >= 400) {
+    addIncident(
+      `frz:${role}:${Math.round(elapsedMs / 1000)}`,
+      elapsedMs,
+      role,
+      'freeze',
+      worst >= 700 ? 'bad' : 'warn',
+      `Frame froze for ${(worst / 1000).toFixed(1)} s`,
+    );
+  }
+
+  if (series.length >= 12 && device.fps != null) {
+    const recent = series
+      .slice(-31, -1)
+      .map((p) => p.fps)
+      .sort((a, b) => a - b);
+    const median = recent[Math.floor(recent.length / 2)] ?? 0;
+    const lastAt = state.lastDropAtByRole.get(role) ?? -Infinity;
+    if (median >= 10 && device.fps <= median * 0.5 && elapsedMs - lastAt > 8000) {
+      state.lastDropAtByRole.set(role, elapsedMs);
+      addIncident(
+        `drp:${role}:${Math.round(elapsedMs / 1000)}`,
+        elapsedMs,
+        role,
+        'fps drop',
+        device.fps <= median * 0.3 ? 'bad' : 'warn',
+        `Frame rate fell to ${Math.round(device.fps)} fps (recently ~${Math.round(median)})`,
+      );
+    }
+  }
 }
 
 function appendLog(elapsedMs, text, className) {
@@ -894,6 +1004,7 @@ function onSessionStatus(status) {
 
         series.push({ elapsedMs, fps: d.fps, janks });
         state.fpsByRole.set(d.role, series);
+        detectFpsIncidents(d.role, elapsedMs, d, series);
       }
     }
   }
