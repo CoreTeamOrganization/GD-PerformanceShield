@@ -26,7 +26,21 @@ export class Adb {
   /** Run a raw adb command with no device target (e.g. `devices`, `start-server`). */
   async raw(args: string[], timeoutMs = 30_000): Promise<RunResult> {
     this.logger?.trace('adb', { args: args.join(' ') });
-    return run(this.adbPath, args, { timeoutMs });
+    try {
+      return await run(this.adbPath, args, { timeoutMs });
+    } catch (e) {
+      // "spawn adb ENOENT" is what Node says; an operator deserves what it means.
+      const message = e instanceof Error ? e.message : String(e);
+      if (/ENOENT/.test(message)) {
+        throw new DeviceError('adb was not found on this machine.', {
+          hint:
+            'Install Android platform-tools (macOS: brew install android-platform-tools; ' +
+            'Windows: download platform-tools from developer.android.com and add it to PATH), ' +
+            'or point GDPS_ADB_PATH at the adb binary, then press Refresh.',
+        });
+      }
+      throw e;
+    }
   }
 
   async startServer(): Promise<void> {

@@ -60847,6 +60847,7 @@ function summarizeFrames(buckets, displayHz) {
     smallJanks: 0,
     janks: 0,
     bigJanks: 0,
+    crossToolJanks: 0,
     buckets: []
   };
   if (frameCount === 0) return empty;
@@ -60877,9 +60878,12 @@ function summarizeFrames(buckets, displayHz) {
   let janks = 0;
   let bigJanks = 0;
   const missedRefreshMs = refreshMs * 1.5;
+  const crossToolMs = Math.max(missedRefreshMs, medianMs * 2);
+  let crossToolJanks = 0;
   for (const bucket of sorted) {
     if (bucket.ms > missedRefreshMs) smallJanks += bucket.count;
     if (bucket.ms > JANK_MS) janks += bucket.count;
+    if (bucket.ms > crossToolMs) crossToolJanks += bucket.count;
     if (bucket.ms > BIG_JANK_MS) bigJanks += bucket.count;
   }
   return {
@@ -60892,10 +60896,11 @@ function summarizeFrames(buckets, displayHz) {
     smallJanks,
     janks,
     bigJanks,
+    crossToolJanks,
     buckets: sorted
   };
 }
-var relativeJankNote = 'A frame counts as a jank when it takes over 83 ms, and as a severe jank over 125 ms. These are the standard absolute thresholds and are applied exactly. The standard also counts a frame as janky when it takes more than twice the average of the previous three frames, and that criterion is not applied here: it needs frames in order, and the Android interface that reported ordered frame times was removed in recent versions. Substituting the median of a five-second window was tried and rejected - on a vsync-limited game it counted a dropped frame at every 33 ms interval and inflated the total roughly twenty-five-fold. The count below is therefore conservative: it will miss a stutter that is severe relative to its neighbours but under 83 ms. The "missed a refresh" row catches those.';
+var relativeJankNote = 'A frame counts as a jank when it takes over 83 ms, and as a severe jank over 125 ms. These are the standard absolute thresholds and are applied exactly. Tools like GameBench also count a frame as janky when it takes more than twice the average of the previous three frames - a rule that fires on every dropped refresh, so their headline jank number runs far higher than the absolute count on the same session. That criterion needs frames in order, which recent Android no longer reports; the "janks (cross-tool estimate)" row approximates it as frames over twice the typical frame interval, and is the number to hold against a GameBench-style counter. The plain jank count stays conservative on purpose: it means a stall a player felt, not a single dropped refresh.';
 
 // src/telemetry/deviceHealth.ts
 var THERMAL_STATUS = [
@@ -61151,11 +61156,13 @@ function summarizeFps(readings, durationMs = 0) {
       smallJanks: null,
       janks: null,
       bigJanks: null,
+      crossToolJanks: null,
       janksPerMinute: null,
       totalFrames: null,
       displayHz: null,
       matchesDisplayRate: null,
       minFps: null,
+      stabilityPercent: null,
       lowPercentileFps: null,
       percentiles: null,
       sampleCount: 0,
@@ -61199,6 +61206,20 @@ function summarizeFps(readings, durationMs = 0) {
   const worstFrameMs = session?.longestFrameMs ?? null;
   const sampled = readings.map((r) => r.fps).sort((a, b) => a - b);
   const medianFps = sampled.length > 0 ? Math.round(sampled[Math.floor(sampled.length / 2)] * 10) / 10 : null;
+  let stabilityPercent = null;
+  if (medianFps !== null && medianFps > 0) {
+    const lo = medianFps * 0.8;
+    const hi = medianFps * 1.2;
+    let inBand = 0;
+    let weighed = 0;
+    for (const r of readings) {
+      const weight = r.windowMs != null && r.windowMs > 0 ? r.windowMs : measuredMs > 0 ? 0 : 1;
+      if (weight <= 0) continue;
+      weighed += weight;
+      if (r.fps >= lo && r.fps <= hi) inBand += weight;
+    }
+    if (weighed > 0) stabilityPercent = Math.round(inBand / weighed * 1e3) / 10;
+  }
   return {
     averageFps: totalFrames > 0 ? Math.round(averageFps * 10) / 10 : null,
     medianFps,
@@ -61211,11 +61232,13 @@ function summarizeFps(readings, durationMs = 0) {
     smallJanks: session?.smallJanks ?? null,
     janks,
     bigJanks: session?.bigJanks ?? null,
+    crossToolJanks: session?.crossToolJanks ?? null,
     janksPerMinute: janks !== null && durationMs > 0 ? Math.round(janks / (durationMs / 6e4) * 10) / 10 : null,
     totalFrames: frameTotal > 0 ? frameTotal : null,
     displayHz: hz,
     matchesDisplayRate: judged > 0 ? matching / judged > 0.75 : null,
     minFps: sorted[0] ?? null,
+    stabilityPercent,
     // The same figure as `percentiles.p01`, kept under its older name. It used
     // to be computed separately with a different index, so the two disagreed.
     lowPercentileFps: sorted.length > 0 ? at(0.01) : null,
@@ -63724,10 +63747,11 @@ function findSpikes(series, events, thresholds, totalRamBytes) {
     if (delta < limit) continue;
     const previous = spikes[spikes.length - 1];
     if (previous && current.elapsedMs - previous.atMs <= thresholds.spikeWindowMs * 2) {
+      const startMs = previous.atMs - previous.windowMs;
       previous.toBytes = Math.max(previous.toBytes, current.value);
       previous.deltaBytes = previous.toBytes - previous.fromBytes;
       previous.atMs = current.elapsedMs;
-      previous.windowMs = current.elapsedMs - previous.windowMs >= 0 ? previous.windowMs : previous.windowMs;
+      previous.windowMs = Math.max(previous.windowMs, current.elapsedMs - startMs);
       continue;
     }
     spikes.push({
@@ -63868,7 +63892,9 @@ function detectProcessTermination(timeline, perDevice, packageName) {
   const killLogs = timeline.logs.filter(
     (l) => l.category === "oom_kill" && concernsApp(l, packageName)
   );
-  const crashLogs = timeline.logs.filter((l) => l.category === "crash");
+  const crashLogs = timeline.logs.filter(
+    (l) => l.category === "crash" && concernsApp(l, packageName)
+  );
   for (const summary of perDevice) {
     const deviceDeaths = deathEvents.filter((e) => !e.serial || e.serial === summary.serial);
     const osKills = killLogs.filter(
@@ -64420,15 +64446,14 @@ function screenFindings(visits, threshold, role) {
     const retained = screenVisits.map((v) => v.retainedBytes ?? 0);
     const meanRetained = retained.reduce((a, b) => a + b, 0) / retained.length;
     if (meanRetained <= threshold) continue;
-    const peakCost = Math.max(
-      ...screenVisits.map((v) => (v.peakBytes ?? 0) - (v.openBytes ?? 0))
-    );
+    const costs = screenVisits.filter((v) => v.peakBytes != null && v.openBytes != null).map((v) => v.peakBytes - v.openBytes);
+    const peakCost = costs.length > 0 ? Math.max(...costs) : null;
     findings.push({
       ruleId: "LIVE.SCREEN_RETENTION",
       id: findingId("LIVE.SCREEN_RETENTION", `${role}:${screen}`),
       source: "live",
       title: `"${screen}" keeps ${fmtMb2(meanRetained)} after being closed (Device ${role})`,
-      description: `Opening "${screen}" cost about ${fmtMb2(peakCost)}, and ${fmtMb2(meanRetained)} of that was still held after it was closed` + (screenVisits.length > 1 ? `, consistently across ${screenVisits.length} visits` : "") + ". Closing a screen should return it to roughly the memory level it started from.",
+      description: (peakCost !== null && peakCost > 0 ? `Opening "${screen}" cost about ${fmtMb2(peakCost)}, and ${fmtMb2(meanRetained)} of that was still ` : `"${screen}" left memory ${fmtMb2(meanRetained)} higher than before it opened, still `) + `held after it was closed` + (screenVisits.length > 1 ? `, consistently across ${screenVisits.length} visits` : "") + ". Closing a screen should return it to roughly the memory level it started from.",
       severity: meanRetained > 150 * MB ? "high" : meanRetained > 60 * MB ? "medium" : "low",
       confidence: screenVisits.length > 1 ? 0.85 : 0.7,
       recommendation: `Check how "${screen}" loads and unloads its content. If it uses Addressables, verify every handle is released when the screen closes; if it instantiates UI, verify the objects are destroyed rather than deactivated; if it shows item icons, verify the atlas is unloaded.`,
@@ -64840,6 +64865,15 @@ function classifyFromThreadTimes(budget) {
   stages.sort((a, b) => b.ms - a.ms);
   const worst = stages[0];
   const runnerUp = stages[1];
+  if (budget.targetMs != null && worst.ms < budget.targetMs * 0.7) {
+    return {
+      kind: "balanced",
+      headline: "No stage fills the frame - the rate is set by a cap or vsync, not the hardware.",
+      reason: `The longest stage, ${worst.label}, took ${worst.ms} ms of the ${budget.targetMs} ms one frame is allowed - every stage has headroom. A rate below the panel with this much headroom usually means a frame cap, vsync, or a sleep in the game loop.`,
+      confidence: 0.7
+    };
+  }
+  if (!runnerUp && budget.targetMs == null) return null;
   const overTarget = budget.targetMs != null && worst.ms > budget.targetMs ? ` That is over the ${budget.targetMs} ms one frame is allowed at this refresh rate.` : "";
   if (runnerUp && worst.ms < runnerUp.ms * 1.15) {
     return {
@@ -64956,9 +64990,10 @@ function classifyDeviceTier(spec) {
   const reasons = [`${gb.toFixed(1)} GB of RAM`];
   if (mhz !== null) {
     reasons.push(`fastest core ${(mhz / 1e3).toFixed(1)} GHz`);
-    if (mhz < 2e3 && tier === "high") tier = "mid";
-    if (mhz < 1900 && tier === "mid") tier = "low";
-    if (mhz >= 2900 && tier === "mid" && gb > 5) tier = "high";
+    const ramTier = tier;
+    if (mhz < 2e3 && ramTier === "high") tier = "mid";
+    else if (mhz < 1900 && ramTier === "mid") tier = "low";
+    else if (mhz >= 2900 && ramTier === "mid" && gb > 5) tier = "high";
   }
   if (spec.coreCount != null) reasons.push(`${spec.coreCount} cores`);
   if (spec.displayHz != null) reasons.push(`${spec.displayHz} Hz panel`);
@@ -65230,6 +65265,7 @@ function diagnose(input) {
 }
 function gatherCauses(input, atMs) {
   const causes = [];
+  let stageCause = null;
   const near = (ms) => Math.abs(ms - atMs) <= COINCIDENCE_TOLERANCE_MS;
   const spike = input.memorySpikes.filter((s) => near(s.toMs) || s.fromMs <= atMs && s.toMs >= atMs).sort((a, b) => Math.abs(b.deltaBytes) - Math.abs(a.deltaBytes))[0];
   if (spike && spike.deltaBytes > 0) {
@@ -65267,11 +65303,11 @@ function gatherCauses(input, atMs) {
     ];
     const worst = stages.filter((s) => typeof s[2] === "number").sort((a, b) => b[2] - a[2])[0];
     if (worst && worst[2] >= 25) {
-      causes.push({
+      stageCause = {
         subsystem: worst[0],
         statement: `${worst[1]} took ${worst[2].toFixed(1)} ms for that frame`,
-        weight: 0.8
-      });
+        weight: 0
+      };
     }
   }
   const burst = input.ioBursts.filter((b) => near(b.elapsedMs)).sort((a, b) => b.readBytesPerSecond - a.readBytesPerSecond)[0];
@@ -65324,6 +65360,11 @@ function gatherCauses(input, atMs) {
       weight: 0.45
     });
   }
+  if (stageCause) {
+    const strongest = causes.reduce((m, c) => Math.max(m, c.weight), 0);
+    stageCause.weight = strongest >= 0.4 ? Math.max(0.3, strongest - 0.05) : 0.8;
+    causes.push(stageCause);
+  }
   causes.sort((a, b) => b.weight - a.weight);
   return causes.slice(0, 4);
 }
@@ -65333,7 +65374,7 @@ function buildDiagnosis(input, event, causes, index) {
   const symptom = `Frame rate fell from ${event.beforeFps} to ${event.lowestFps} fps at ${at}` + (seconds > 1 ? ` and stayed down for about ${seconds} s` : "") + ` - a drop of ${Math.abs(event.changePercent).toFixed(0)}% against ${event.basis}`;
   const severity = event.severity;
   const conclusion = causes.length === 0 ? `${symptom}. Nothing in the other subsystems moved in the same window, so this drop is unexplained by the data collected. Adding the Unity reporter component to the build would give per-frame thread and GPU times, which is what usually settles it.` : `${symptom}. In the same window (\xB1${COINCIDENCE_TOLERANCE_MS / 1e3} s): ${causes.map((c) => c.statement).join("; ")}. Most likely cause: ${SUBSYSTEM_CAUSE[causes[0].subsystem]}. These readings coincide; the tool does not prove one caused the other.`;
-  const confidence = causes.length === 0 ? 0.2 : clamp012(0.35 + causes[0].weight * 0.4 + (causes.length - 1) * 0.05);
+  const confidence = causes.length === 0 ? 0.2 : Math.min(0.9, clamp012(0.35 + causes[0].weight * 0.45 + (causes.length - 1) * 0.05));
   return {
     id: `diag_${input.role}_${index + 1}`,
     role: input.role,
@@ -66128,9 +66169,14 @@ var reportSchema = external_exports.object({
         longestFrameMs: external_exports.number().nullable(),
         /** Frames over one display refresh period. */
         smallJanks: external_exports.number().nullable(),
-        /** Frames over 83 ms, or over twice their window's median. */
+        /** Frames over 83 ms - a stall a player felt. */
         janks: external_exports.number().nullable(),
         bigJanks: external_exports.number().nullable(),
+        /**
+         * GameBench-comparable estimate: frames over twice the typical
+         * interval. Optional: older stored reports do not carry it.
+         */
+        crossToolJanks: external_exports.number().nullable().optional(),
         janksPerMinute: external_exports.number().nullable(),
         totalFrames: external_exports.number().nullable(),
         /** The panel's refresh rate - a device property, not the game's. */
@@ -66138,6 +66184,12 @@ var reportSchema = external_exports.object({
         /** True when the game tracked the panel, so a frame cap is not applying. */
         matchesDisplayRate: external_exports.boolean().nullable(),
         minFps: external_exports.number().nullable(),
+        /**
+         * Share of session time within ±20% of the median rate, 0-100.
+         * Over 75 reads as stable around the median; 80 as good.
+         * Optional: reports written before it existed do not carry it.
+         */
+        stabilityPercent: external_exports.number().nullable().optional(),
         lowPercentileFps: external_exports.number().nullable(),
         /**
          * The percentile ladder over the per-second samples, named to match
@@ -68418,6 +68470,11 @@ function renderFrameRate(w, report) {
   w("|---|---|---|");
   if (f.medianFps != null) w(`| Median | **${f.medianFps} fps** | the typical second |`);
   if (f.averageFps != null) w(`| Average | **${f.averageFps} fps** | frames over measured time |`);
+  if (f.stabilityPercent != null) {
+    w(
+      `| Stability | **${f.stabilityPercent}%** | time within \xB120% of the median \xB7 ${f.stabilityPercent >= 80 ? "good" : f.stabilityPercent >= 75 ? "stable" : "inconsistent - the rate wanders"} |`
+    );
+  }
   if (f.janks != null) {
     w(
       `| Stutter | **${f.janks}** jank(s) | ${RATING_LABEL[jankRating]}` + (f.janksPerMinute != null ? ` \xB7 ${f.janksPerMinute}/min` : "") + " |"
@@ -68425,6 +68482,11 @@ function renderFrameRate(w, report) {
   }
   if (f.bigJanks != null) {
     w(`| Severe jank | ${f.bigJanks} | ${f.bigJanks === 0 ? "none" : "visible hitches"} |`);
+  }
+  if (f.crossToolJanks != null) {
+    w(
+      `| Janks (cross-tool estimate) | ~${f.crossToolJanks} | what a GameBench-style counter reports - every frame over twice the typical interval; see the method note |`
+    );
   }
   if (f.smallJanks != null) {
     w(`| Missed a refresh | ${f.smallJanks} | expected below the cap |`);
@@ -68805,7 +68867,7 @@ function renderSummary(w, report, audience) {
     }
     if (f?.medianFps != null && f.averageFps != null) {
       w(
-        `| **Frame rate** | **${f.medianFps} fps** median \xB7 **${f.averageFps} fps** average` + (f.displayHz ? ` (screen refreshes at ${f.displayHz} Hz)` : "") + " |"
+        `| **Frame rate** | **${f.medianFps} fps** median \xB7 **${f.averageFps} fps** average` + (f.stabilityPercent != null ? ` \xB7 ${f.stabilityPercent}% stable` : "") + (f.displayHz ? ` (screen refreshes at ${f.displayHz} Hz)` : "") + " |"
       );
     } else if (f?.averageFps != null) {
       void f;
@@ -71373,6 +71435,11 @@ function renderFrameRate2(report, audience) {
   const headline = [
     fps.medianFps != null ? statCell("Median", `${fps.medianFps}<span class="unit">fps</span>`, "the typical second") : "",
     fps.averageFps != null ? statCell("Average", `${fps.averageFps}<span class="unit">fps</span>`, "frames over measured time") : "",
+    fps.stabilityPercent != null ? statCell(
+      "Stability",
+      `${fps.stabilityPercent}<span class="unit">%</span>`,
+      fps.stabilityPercent >= 80 ? "within \xB120% of median \xB7 good" : fps.stabilityPercent >= 75 ? "within \xB120% of median \xB7 stable" : "within \xB120% of median \xB7 inconsistent"
+    ) : "",
     fps.janks != null ? statCell(
       "Stutter",
       `${fps.janks}<span class="unit">janks</span>`,
@@ -71408,6 +71475,9 @@ function renderFrameRate2(report, audience) {
         <tr><td>Missed a refresh</td><td class="num">${fps.smallJanks ?? "&mdash;"}</td>
           <td>Frame took longer than 1.5 screen refreshes</td>
           <td>${remark("expected below the cap", "flat")}</td></tr>
+        <tr><td>Janks (cross-tool estimate)</td><td class="num">${fps.crossToolJanks != null ? `~${fps.crossToolJanks}` : "&mdash;"}</td>
+          <td>Frame over twice the typical interval &mdash; what GameBench-style counters report</td>
+          <td>${remark("for comparing against other tools; see the method note", "flat")}</td></tr>
         <tr><td>Jank</td><td class="num">${fps.janks}</td>
           <td>Frame over 83 ms &mdash; noticeable</td>
           <td>${remark(
@@ -72595,7 +72665,7 @@ function compareRuntime(a, b, _sameGround, targets) {
     const y = after ?? null;
     const delta = x !== null && y !== null ? y - x : null;
     let direction = "unknown";
-    if (delta !== null) {
+    if (delta !== null && higherIsBetter !== null) {
       if (delta === 0) direction = "unchanged";
       else direction = delta > 0 === higherIsBetter ? "improved" : "regressed";
     }
@@ -72660,7 +72730,7 @@ function compareRuntime(a, b, _sameGround, targets) {
     "Screen refresh rate (Hz)",
     devA?.fps?.displayHz,
     devB?.fps?.displayHz,
-    true,
+    null,
     "A property of the phone, not of the build. Included so the frame rates above can be read against it."
   );
   row("Peak temperature (\xB0C)", devA?.thermal?.peakC, devB?.thermal?.peakC, false);
@@ -72681,7 +72751,13 @@ function compareRuntime(a, b, _sameGround, targets) {
     "How much room the game had when it started. Only recorded for a run where the phone was cleared first."
   );
   row("Temperature at end (\xB0C)", devA?.thermal?.endC, devB?.thermal?.endC, false);
-  row("Battery at end (%)", devA?.battery?.endPercent, devB?.battery?.endPercent, true);
+  row(
+    "Battery at end (%)",
+    devA?.battery?.endPercent,
+    devB?.battery?.endPercent,
+    null,
+    "Depends on where the charge started, so no verdict - the drain-per-hour row above is the comparable figure."
+  );
   row(
     "Combined risk score",
     a.verdict?.combinedRisk?.value,
@@ -72692,7 +72768,7 @@ function compareRuntime(a, b, _sameGround, targets) {
     "Session duration (minutes)",
     a.session ? Math.round(a.session.durationMs / 6e4) : null,
     b.session ? Math.round(b.session.durationMs / 6e4) : null,
-    true,
+    null,
     "Longer or shorter is neither good nor bad - it is the context every whole-session figure above depends on."
   );
   return rows;

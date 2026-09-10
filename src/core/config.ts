@@ -40,6 +40,20 @@ function resolveAdb(): string {
     const candidate = join(sdk, 'platform-tools', `adb${EXE}`);
     if (existsSync(candidate)) return candidate;
   }
+  /*
+   * Well-known install locations, checked before trusting PATH.
+   *
+   * A desktop app launched from Finder or the Dock gets the system's minimal
+   * PATH - /usr/bin:/bin:/usr/sbin:/sbin - which contains neither Homebrew's
+   * /opt/homebrew/bin nor /usr/local/bin. So "brew install android-platform-
+   * tools" fixed the terminal and left the packaged app still reporting adb
+   * as missing, which reads to an operator like the install did not work.
+   */
+  const known = WINDOWS
+    ? []
+    : ['/opt/homebrew/bin/adb', '/usr/local/bin/adb', '/opt/local/bin/adb'];
+  const found = known.find((k) => existsSync(k));
+  if (found) return found;
   return 'adb'; // rely on PATH
 }
 
