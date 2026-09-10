@@ -363,9 +363,14 @@ export const reportSchema = z.object({
           longestFrameMs: z.number().nullable(),
           /** Frames over one display refresh period. */
           smallJanks: z.number().nullable(),
-          /** Frames over 83 ms, or over twice their window's median. */
+          /** Frames over 83 ms - a stall a player felt. */
           janks: z.number().nullable(),
           bigJanks: z.number().nullable(),
+          /**
+           * GameBench-comparable estimate: frames over twice the typical
+           * interval. Optional: older stored reports do not carry it.
+           */
+          crossToolJanks: z.number().nullable().optional(),
           janksPerMinute: z.number().nullable(),
           totalFrames: z.number().nullable(),
           /** The panel's refresh rate - a device property, not the game's. */

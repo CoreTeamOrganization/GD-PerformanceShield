@@ -711,6 +711,12 @@ function renderFrameRate(w: Write, report: AnalysisReport): void {
   if (f.bigJanks != null) {
     w(`| Severe jank | ${f.bigJanks} | ${f.bigJanks === 0 ? 'none' : 'visible hitches'} |`);
   }
+  if (f.crossToolJanks != null) {
+    w(
+      `| Janks (cross-tool estimate) | ~${f.crossToolJanks} | what a GameBench-style counter ` +
+        'reports - every frame over twice the typical interval; see the method note |',
+    );
+  }
   if (f.smallJanks != null) {
     w(`| Missed a refresh | ${f.smallJanks} | expected below the cap |`);
   }

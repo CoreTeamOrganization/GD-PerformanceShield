@@ -1554,6 +1554,11 @@ function renderFrameRate(report: AnalysisReport, audience: ReportAudience): stri
         <tr><td>Missed a refresh</td><td class="num">${fps.smallJanks ?? '&mdash;'}</td>
           <td>Frame took longer than 1.5 screen refreshes</td>
           <td>${remark('expected below the cap', 'flat')}</td></tr>
+        <tr><td>Janks (cross-tool estimate)</td><td class="num">${
+          fps.crossToolJanks != null ? `~${fps.crossToolJanks}` : '&mdash;'
+        }</td>
+          <td>Frame over twice the typical interval &mdash; what GameBench-style counters report</td>
+          <td>${remark('for comparing against other tools; see the method note', 'flat')}</td></tr>
         <tr><td>Jank</td><td class="num">${fps.janks}</td>
           <td>Frame over 83 ms &mdash; noticeable</td>
           <td>${remark(

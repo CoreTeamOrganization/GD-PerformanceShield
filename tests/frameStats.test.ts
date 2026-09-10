@@ -334,3 +334,46 @@ describe('fps stability', () => {
     expect(summarizeFps([], 0).stabilityPercent).toBeNull();
   });
 });
+
+/**
+ * The cross-tool jank estimate - the number to hold against GameBench.
+ *
+ * Their relative rule (over twice the recent average) fires on every dropped
+ * refresh, so their headline count runs far above the absolute 83 ms count on
+ * the same session. The estimate stands in twice-the-median for twice-the-
+ * recent-average, and these cases pin the two properties that make it fair:
+ * it counts dropped refreshes on a vsync game, and it tracks the game's own
+ * cap instead of judging a 30 fps title against 60 fps expectations.
+ */
+describe('cross-tool jank estimate', () => {
+  it('counts every dropped refresh on a vsync-locked game, where the absolute count sees almost none', () => {
+    // 9000 frames on vsync, 150 dropped refreshes at 33 ms, 7 real stalls.
+    const stats = summarizeFrames(
+      [
+        { ms: 16, count: 9000 },
+        { ms: 33, count: 150 },
+        { ms: 100, count: 7 },
+      ],
+      60,
+    );
+    expect(stats.crossToolJanks).toBe(157); // the GameBench-style figure
+    expect(stats.janks).toBe(7); // the stall-a-player-felt figure
+  });
+
+  it('judges a 30 fps-capped game against its own cap, not the panel', () => {
+    // Median frame is 33 ms, so the threshold is 66 ms: the 70 ms and 130 ms
+    // frames count, the ordinary 33 ms frames do not - even though every one
+    // of them technically missed a 60 Hz refresh.
+    const stats = summarizeFrames(
+      [
+        { ms: 33, count: 500 },
+        { ms: 70, count: 20 },
+        { ms: 130, count: 3 },
+      ],
+      60,
+    );
+    expect(stats.crossToolJanks).toBe(23);
+    expect(stats.janks).toBe(3);
+    expect(stats.bigJanks).toBe(3);
+  });
+});

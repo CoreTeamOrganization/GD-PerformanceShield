@@ -811,10 +811,24 @@ export interface FrameStats {
   longestFrameMs: number | null;
   /** Frames over one display refresh period. */
   smallJanks: number;
-  /** Frames over 83 ms, or over twice the window's median. */
+  /** Frames over 83 ms - the absolute threshold, applied exactly. */
   janks: number;
-  /** Frames over 125 ms, or over twice the window's median. */
+  /** Frames over 125 ms. */
   bigJanks: number;
+  /**
+   * What a GameBench-style counter would report, estimated.
+   *
+   * Their relative rule counts a frame that takes over twice the average of
+   * the previous three - which, on a vsync-locked game, fires on every dropped
+   * refresh: a 33 ms frame after three 16 ms frames is over 2x32/2. That is why
+   * their jank number can be ~25x the absolute count on the same session.
+   * Ordered frame times are unavailable here, so twice the *median* interval
+   * stands in for twice the recent average: over a window the two agree except
+   * right at a level change. Kept separate from `janks` - one figure for
+   * cross-tool comparison, one that means "a stall a player felt" - because
+   * merging them would make both worse.
+   */
+  crossToolJanks: number;
   /** The buckets themselves, so a chart or a later rule can use them. */
   buckets: Array<{ ms: number; count: number }>;
 }
@@ -868,6 +882,7 @@ export function summarizeFrames(
     smallJanks: 0,
     janks: 0,
     bigJanks: 0,
+    crossToolJanks: 0,
     buckets: [],
   };
   if (frameCount === 0) return empty;
@@ -934,9 +949,19 @@ export function summarizeFrames(
    * refresh, and there were exactly two frames anywhere between.
    */
   const missedRefreshMs = refreshMs * 1.5;
+  /*
+   * The cross-tool threshold: twice the median frame interval, floored by the
+   * missed-refresh guard so millisecond binning cannot count on-vsync frames.
+   * Twice-the-median tracks the game's own cap - a 30 fps title (33 ms frames)
+   * is judged against 66 ms, exactly as a relative rule would judge it - which
+   * is what keeps this a fair stand-in for the ordered-frames rule.
+   */
+  const crossToolMs = Math.max(missedRefreshMs, medianMs * 2);
+  let crossToolJanks = 0;
   for (const bucket of sorted) {
     if (bucket.ms > missedRefreshMs) smallJanks += bucket.count;
     if (bucket.ms > JANK_MS) janks += bucket.count;
+    if (bucket.ms > crossToolMs) crossToolJanks += bucket.count;
     // Absolute only. The published definition lists the same relative condition
     // for a big jank as for an ordinary one, which would make the two counts
     // identical and the distinction useless - so a big jank is taken to be the
@@ -954,6 +979,7 @@ export function summarizeFrames(
     smallJanks,
     janks,
     bigJanks,
+    crossToolJanks,
     buckets: sorted,
   };
 }
@@ -966,11 +992,11 @@ export function summarizeFrames(
  */
 export const relativeJankNote =
   'A frame counts as a jank when it takes over 83 ms, and as a severe jank over 125 ms. These ' +
-  'are the standard absolute thresholds and are applied exactly. The standard also counts a ' +
-  'frame as janky when it takes more than twice the average of the previous three frames, and ' +
-  'that criterion is not applied here: it needs frames in order, and the Android interface that ' +
-  'reported ordered frame times was removed in recent versions. Substituting the median of a ' +
-  'five-second window was tried and rejected - on a vsync-limited game it counted a dropped ' +
-  'frame at every 33 ms interval and inflated the total roughly twenty-five-fold. The count ' +
-  'below is therefore conservative: it will miss a stutter that is severe relative to its ' +
-  'neighbours but under 83 ms. The "missed a refresh" row catches those.';
+  'are the standard absolute thresholds and are applied exactly. Tools like GameBench also ' +
+  'count a frame as janky when it takes more than twice the average of the previous three ' +
+  'frames - a rule that fires on every dropped refresh, so their headline jank number runs far ' +
+  'higher than the absolute count on the same session. That criterion needs frames in order, ' +
+  'which recent Android no longer reports; the "janks (cross-tool estimate)" row approximates ' +
+  'it as frames over twice the typical frame interval, and is the number to hold against a ' +
+  'GameBench-style counter. The plain jank count stays conservative on purpose: it means a ' +
+  'stall a player felt, not a single dropped refresh.';

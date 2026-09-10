@@ -590,10 +590,15 @@ export interface FpsSummary {
   longestFrameMs: number | null;
   /** Frames over one display refresh period. */
   smallJanks: number | null;
-  /** Frames over 83 ms, or over twice their window's median. */
+  /** Frames over 83 ms - a stall a player felt. */
   janks: number | null;
   /** Frames over 125 ms. */
   bigJanks: number | null;
+  /**
+   * What a GameBench-style counter would report: frames over twice the typical
+   * interval. The figure to hold against another tool's headline jank number.
+   */
+  crossToolJanks: number | null;
   janksPerMinute: number | null;
   /** Every frame counted, across every window. */
   totalFrames: number | null;
@@ -667,6 +672,7 @@ export function summarizeFps(
       smallJanks: null,
       janks: null,
       bigJanks: null,
+      crossToolJanks: null,
       janksPerMinute: null,
       totalFrames: null,
       displayHz: null,
@@ -827,6 +833,7 @@ export function summarizeFps(
     smallJanks: session?.smallJanks ?? null,
     janks,
     bigJanks: session?.bigJanks ?? null,
+    crossToolJanks: session?.crossToolJanks ?? null,
     janksPerMinute:
       janks !== null && durationMs > 0
         ? Math.round((janks / (durationMs / 60_000)) * 10) / 10
