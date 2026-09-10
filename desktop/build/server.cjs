@@ -61272,6 +61272,7 @@ function summarizeFps(readings, durationMs = 0) {
       stabilityPercent: null,
       lowPercentileFps: null,
       percentiles: null,
+      frameBuckets: null,
       sampleCount: 0,
       jankPercent: null,
       worstFrameMs: null,
@@ -61358,6 +61359,7 @@ function summarizeFps(readings, durationMs = 0) {
       p95: at(0.95),
       p99: at(0.99)
     } : null,
+    frameBuckets: session && session.buckets.length > 0 ? session.buckets : null,
     sampleCount: readings.length,
     jankPercent: jankSamples.length > 0 ? Math.round(
       jankSamples.reduce((sum, r) => sum + r.jankPercent, 0) / jankSamples.length * 10
@@ -63364,6 +63366,7 @@ var CaptureSession = class extends import_node_events4.EventEmitter {
           // Cumulative, so the operator sees stutter accumulate rather than only
           // whatever happened in the last five seconds.
           janks: r.fpsSeries.reduce((sum, p) => sum + p.janks, 0),
+          worstFrameMs: r.fpsReadings.at(-1)?.frames?.longestFrameMs ?? r.fpsReadings.at(-1)?.worstFrameMs ?? null,
           fpsMatchesDisplayRate: r.fpsReadings.at(-1)?.matchesDisplayRate ?? null,
           fpsSource: r.sampler.frameRateSource,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,
@@ -66311,6 +66314,11 @@ var reportSchema = external_exports.object({
           p95: external_exports.number(),
           p99: external_exports.number()
         }).nullable().optional(),
+        /**
+         * The merged frame-interval histogram, for the frame-time chart.
+         * Optional: older stored reports do not carry it.
+         */
+        frameBuckets: external_exports.array(external_exports.object({ ms: external_exports.number(), count: external_exports.number() })).nullable().optional(),
         sampleCount: external_exports.number(),
         jankPercent: external_exports.number().nullable(),
         worstFrameMs: external_exports.number().nullable(),
@@ -66658,6 +66666,31 @@ var reportSchema = external_exports.object({
     )
   }).nullable().optional(),
   artifacts: external_exports.array(external_exports.object({ kind: external_exports.string(), path: external_exports.string(), description: external_exports.string() })),
+  /**
+   * The headline delta against this game's previous analysis, attached
+   * automatically when one exists in the workspace. "Did the update make it
+   * better?" is the first question every reader asks; this answers it without
+   * anyone having to run the compare command. Optional: the first run of a
+   * game has nothing to compare against, and older reports predate the field.
+   */
+  previousRun: external_exports.object({
+    analysisId: external_exports.string(),
+    /** When the previous run happened, for "compared against what". */
+    when: external_exports.string().nullable(),
+    device: external_exports.string().nullable(),
+    /** True when the comparison gates refused a verdict (e.g. different hardware). */
+    blocked: external_exports.boolean(),
+    caveats: external_exports.array(external_exports.string()),
+    rows: external_exports.array(
+      external_exports.object({
+        label: external_exports.string(),
+        before: external_exports.number().nullable(),
+        after: external_exports.number().nullable(),
+        direction: external_exports.enum(["improved", "regressed", "unchanged", "inconclusive", "unknown"]),
+        note: external_exports.string().optional()
+      })
+    )
+  }).nullable().optional(),
   /** Everything the run could not do, stated plainly. */
   limitations: external_exports.array(external_exports.string())
 });
@@ -67055,6 +67088,480 @@ function isNotableSystemEvent(type) {
   ].includes(type);
 }
 
+// src/analysis/compareSessions.ts
+function gateComparison(a, b) {
+  const gates = [];
+  const pkgA = a.subject.packageName;
+  const pkgB = b.subject.packageName;
+  if (pkgA && pkgB && pkgA !== pkgB) {
+    gates.push({
+      level: "block",
+      key: "package",
+      message: `Different apps: ${pkgA} and ${pkgB}. There is nothing to compare.`
+    });
+  }
+  const devA = a.devices[0];
+  const devB = b.devices[0];
+  if (!devA || !devB) {
+    gates.push({
+      level: "block",
+      key: "device",
+      message: "One of these runs recorded no device, so there is no live capture to compare."
+    });
+    return gates;
+  }
+  if (devA.model !== devB.model || devA.totalRamBytes !== devB.totalRamBytes) {
+    gates.push({
+      level: "block",
+      key: "device",
+      message: `Different hardware: ${devA.manufacturer} ${devA.model} and ${devB.manufacturer} ${devB.model}. GPU drivers attribute memory differently and the per-app budget changes with RAM, so the figures are not commensurable.`
+    });
+  } else if (devA.serial !== devB.serial) {
+    gates.push({
+      level: "warn",
+      key: "device",
+      message: `Same model but a different handset (${devA.serial} and ${devB.serial}). Driver version and thermal state can differ; treat small changes as noise.`
+    });
+  }
+  if (devA.androidVersion !== devB.androidVersion || devA.sdkInt !== devB.sdkInt) {
+    gates.push({
+      level: "warn",
+      key: "android",
+      message: `Different Android versions (${devA.androidVersion} and ${devB.androidVersion}). The memory categories are aggregated differently between releases, so category-level changes may be the OS rather than the build.`
+    });
+  }
+  const freshA = Boolean(devA.freshStart);
+  const freshB = Boolean(devB.freshStart);
+  if (freshA !== freshB) {
+    gates.push({
+      level: "warn",
+      key: "freshStart",
+      message: `One run started on a cleared phone and the other did not (${freshA ? "earlier" : "later"} was cleared). Memory available at launch differed, so part of any change here is the state of the device rather than the build. Clear the phone in both runs, or neither.`
+    });
+  }
+  const verA = a.subject.versionName ?? "?";
+  const verB = b.subject.versionName ?? "?";
+  if (verA !== verB) {
+    gates.push({
+      level: "note",
+      key: "build",
+      message: `Comparing build ${verA} against ${verB}.`
+    });
+  } else {
+    gates.push({
+      level: "note",
+      key: "build",
+      message: `Both runs are build ${verA}. Differences here are run-to-run variance, which makes this pair usable as a noise-floor baseline.`
+    });
+  }
+  return gates;
+}
+function isBlocked(gates) {
+  return gates.some((g) => g.level === "block");
+}
+function deriveNoiseFloor(a, b) {
+  const rows = joinScreens(a, b);
+  const measurable = rows.filter(
+    (r) => r.beforeRetained !== null && r.afterRetained !== null
+  );
+  if (measurable.length === 0) return null;
+  let worstBytes = 0;
+  let worstFraction = 0;
+  for (const row of measurable) {
+    const delta = Math.abs((row.afterRetained ?? 0) - (row.beforeRetained ?? 0));
+    worstBytes = Math.max(worstBytes, delta);
+    const base2 = Math.abs(row.beforeRetained ?? 0);
+    if (base2 > 0) worstFraction = Math.max(worstFraction, delta / base2);
+  }
+  return {
+    bytes: worstBytes,
+    fraction: worstFraction,
+    source: `Measured from two runs of the same build across ${measurable.length} shared screen(s). Any later change smaller than this cannot be told apart from run-to-run variance.`
+  };
+}
+function isConclusive(before, after, floor) {
+  if (before === null || after === null) return false;
+  if (!floor) return true;
+  const delta = Math.abs(after - before);
+  const relative5 = Math.abs(before) > 0 ? delta / Math.abs(before) : Infinity;
+  return delta > floor.bytes || relative5 > floor.fraction;
+}
+function joinScreens(a, b) {
+  const before = worstByScreen(a);
+  const after = worstByScreen(b);
+  const names = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].sort();
+  return names.map((screen) => {
+    const x = before.get(screen);
+    const y = after.get(screen);
+    return {
+      screen,
+      beforeRetained: x?.retainedBytes ?? null,
+      afterRetained: y?.retainedBytes ?? null,
+      beforePeak: x?.peakBytes ?? null,
+      afterPeak: y?.peakBytes ?? null,
+      presence: x && y ? "both" : x ? "before-only" : "after-only"
+    };
+  });
+}
+function worstByScreen(report) {
+  const out = /* @__PURE__ */ new Map();
+  for (const visit of report.session?.screenVisits ?? []) {
+    const existing = out.get(visit.screen);
+    if (!existing) {
+      out.set(visit.screen, {
+        retainedBytes: visit.retainedBytes,
+        peakBytes: visit.peakBytes
+      });
+      continue;
+    }
+    if ((visit.retainedBytes ?? -Infinity) > (existing.retainedBytes ?? -Infinity)) {
+      existing.retainedBytes = visit.retainedBytes;
+    }
+    if ((visit.peakBytes ?? -Infinity) > (existing.peakBytes ?? -Infinity)) {
+      existing.peakBytes = visit.peakBytes;
+    }
+  }
+  return out;
+}
+function joinCycles(a, b) {
+  const pick = (r) => {
+    const out = /* @__PURE__ */ new Map();
+    for (const cycle of r.session?.cycles ?? []) {
+      const existing = out.get(cycle.label);
+      const value = cycle.recoveryDeltaBytes;
+      if (existing === void 0 || (value ?? -Infinity) > (existing ?? -Infinity)) {
+        out.set(cycle.label, value);
+      }
+    }
+    return out;
+  };
+  const before = pick(a);
+  const after = pick(b);
+  const labels = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].sort();
+  return labels.map((label) => ({
+    label,
+    beforeRecovery: before.get(label) ?? null,
+    afterRecovery: after.get(label) ?? null,
+    presence: before.has(label) && after.has(label) ? "both" : before.has(label) ? "before-only" : "after-only"
+  }));
+}
+var BUDGET_RANK = { green: 0, yellow: 1, red: 2 };
+function compareSessions(a, b, opts = {}) {
+  const gates = gateComparison(a, b);
+  const targets = {
+    before: opts.targetFps?.before ?? null,
+    after: opts.targetFps?.after ?? null
+  };
+  if (targets.before !== null && targets.after !== null && targets.before !== targets.after) {
+    gates.push({
+      level: "warn",
+      key: "targetFps",
+      message: `The two runs aimed at different frame rates (${targets.before} fps and ${targets.after} fps). Their measured rates are not comparable directly - read "Frame rate against its own target" below instead, which is the same question asked of both.`
+    });
+  }
+  const blocked = isBlocked(gates);
+  const floor = opts.noiseFloor ?? null;
+  const screenRows = joinScreens(a, b);
+  const shared = screenRows.filter((r) => r.presence === "both");
+  const screens = screenRows.map((row) => ({
+    label: row.screen,
+    before: row.beforeRetained,
+    after: row.afterRetained,
+    deltaBytes: row.beforeRetained !== null && row.afterRetained !== null ? row.afterRetained - row.beforeRetained : null,
+    direction: directionFor(row.beforeRetained, row.afterRetained, floor, row.presence),
+    ...row.presence !== "both" ? {
+      note: row.presence === "before-only" ? "Only the earlier run visited this screen, so there is nothing to compare it with." : "Only the later run visited this screen."
+    } : {}
+  }));
+  const cycles = joinCycles(a, b).map((row) => ({
+    label: row.label,
+    before: row.beforeRecovery,
+    after: row.afterRecovery,
+    deltaBytes: row.beforeRecovery !== null && row.afterRecovery !== null ? row.afterRecovery - row.beforeRecovery : null,
+    direction: directionFor(row.beforeRecovery, row.afterRecovery, floor, row.presence)
+  }));
+  const devA = a.devices[0];
+  const devB = b.devices[0];
+  const sameGround = shared.length > 0 && screenRows.every((r) => r.presence === "both");
+  const peak = {
+    label: "Session peak",
+    before: devA?.peakBytes ?? null,
+    after: devB?.peakBytes ?? null,
+    deltaBytes: devA?.peakBytes != null && devB?.peakBytes != null ? devB.peakBytes - devA.peakBytes : null,
+    direction: sameGround ? directionFor(devA?.peakBytes ?? null, devB?.peakBytes ?? null, floor, "both") : "unknown",
+    note: sameGround ? "Both runs covered the same screens, so the peaks describe the same workload." : "The two runs did not visit the same screens, so their peaks describe different playthroughs rather than different builds. Use the per-screen rows instead."
+  };
+  const killsBefore = devA?.processDeaths ?? null;
+  const killsAfter = devB?.processDeaths ?? null;
+  const kills = {
+    label: "Process kills",
+    before: killsBefore,
+    after: killsAfter,
+    deltaBytes: killsBefore !== null && killsAfter !== null ? killsAfter - killsBefore : null,
+    // A kill is binary and unambiguous; no noise floor applies.
+    direction: killsBefore === null || killsAfter === null ? "unknown" : killsAfter < killsBefore ? "improved" : killsAfter > killsBefore ? "regressed" : "unchanged"
+  };
+  const budgetBefore = devA?.budget?.verdict ?? null;
+  const budgetAfter = devB?.budget?.verdict ?? null;
+  const budget = {
+    before: budgetBefore,
+    after: budgetAfter,
+    direction: budgetBefore === null || budgetAfter === null ? "unknown" : BUDGET_RANK[budgetAfter] < BUDGET_RANK[budgetBefore] ? "improved" : BUDGET_RANK[budgetAfter] > BUDGET_RANK[budgetBefore] ? "regressed" : "unchanged"
+  };
+  return {
+    before: summarize(a),
+    after: summarize(b),
+    runtime: compareRuntime(a, b, sameGround, targets),
+    runtimeCaveat: sameGround ? null : "The two runs did not cover the same screens, so part of every difference below is the playthrough rather than the build.",
+    gates,
+    blocked,
+    noiseFloor: floor,
+    markerOverlap: {
+      shared: shared.length,
+      beforeOnly: screenRows.filter((r) => r.presence === "before-only").length,
+      afterOnly: screenRows.filter((r) => r.presence === "after-only").length
+    },
+    screens,
+    cycles,
+    peak,
+    kills,
+    budget,
+    headline: headlineFor({ blocked, gates, screens, kills, budget, shared: shared.length, floor })
+  };
+}
+function compareRuntime(a, b, _sameGround, targets) {
+  const devA = a.devices[0];
+  const devB = b.devices[0];
+  const rows = [];
+  const row = (label, before, after, higherIsBetter, note) => {
+    const x = before ?? null;
+    const y = after ?? null;
+    const delta = x !== null && y !== null ? y - x : null;
+    let direction = "unknown";
+    if (delta !== null && higherIsBetter !== null) {
+      if (delta === 0) direction = "unchanged";
+      else direction = delta > 0 === higherIsBetter ? "improved" : "regressed";
+    }
+    rows.push({
+      label,
+      before: x,
+      after: y,
+      deltaBytes: delta,
+      direction,
+      ...note ? { note } : {}
+    });
+  };
+  const fpsA = devA?.fps?.averageFps ?? null;
+  const fpsB = devB?.fps?.averageFps ?? null;
+  const differentTargets = targets.before !== null && targets.after !== null && targets.before !== targets.after;
+  if (differentTargets) {
+    rows.push({
+      label: "Average frame rate (fps)",
+      before: fpsA,
+      after: fpsB,
+      deltaBytes: fpsA !== null && fpsB !== null ? fpsB - fpsA : null,
+      direction: "unknown",
+      note: `Not comparable directly: these runs aimed at ${targets.before} and ${targets.after} fps. The achievement row below asks the same question of both.`
+    });
+  } else {
+    row("Average frame rate (fps)", fpsA, fpsB, true);
+  }
+  if (targets.before !== null || targets.after !== null) {
+    rows.push({
+      label: "Target frame rate (fps)",
+      before: targets.before,
+      after: targets.after,
+      deltaBytes: null,
+      // A target is a decision, not an outcome, so neither value is "better".
+      direction: "unknown",
+      note: "What each build was aiming for, as supplied by the operator - not measured."
+    });
+    const achieved = (fps, target) => fps !== null && target !== null && target > 0 ? Math.round(fps / target * 100) : null;
+    const pctA = achieved(fpsA, targets.before);
+    const pctB = achieved(fpsB, targets.after);
+    let direction = "unknown";
+    if (pctA !== null && pctB !== null) {
+      const missA = Math.abs(100 - pctA);
+      const missB = Math.abs(100 - pctB);
+      direction = missB === missA ? "unchanged" : missB < missA ? "improved" : "regressed";
+    }
+    rows.push({
+      label: "Frame rate against its own target (%)",
+      before: pctA,
+      after: pctB,
+      deltaBytes: pctA !== null && pctB !== null ? pctB - pctA : null,
+      direction,
+      note: "The comparable figure when the targets differ. 100% is the build doing exactly what it set out to do; below that is stutter, and above it means a frame-rate cap is not applying - which costs battery and heat for frames nobody asked for."
+    });
+  }
+  row("Median frame rate (fps)", devA?.fps?.medianFps, devB?.fps?.medianFps, true);
+  row("Worst 1% of frames (fps)", devA?.fps?.low1PercentFps, devB?.fps?.low1PercentFps, true);
+  row("Stutter (janks per minute)", devA?.fps?.janksPerMinute, devB?.fps?.janksPerMinute, false);
+  row("Severe janks", devA?.fps?.bigJanks, devB?.fps?.bigJanks, false);
+  row("Longest single frame (ms)", devA?.fps?.longestFrameMs, devB?.fps?.longestFrameMs, false);
+  row(
+    "Screen refresh rate (Hz)",
+    devA?.fps?.displayHz,
+    devB?.fps?.displayHz,
+    null,
+    "A property of the phone, not of the build. Included so the frame rates above can be read against it."
+  );
+  row("Peak temperature (\xB0C)", devA?.thermal?.peakC, devB?.thermal?.peakC, false);
+  row("Temperature rise (\xB0C)", devA?.thermal?.riseC, devB?.thermal?.riseC, false);
+  const batteryNote = devA?.battery?.unavailableReason ?? devB?.battery?.unavailableReason ?? void 0;
+  row(
+    "Battery used (% per hour)",
+    devA?.battery?.drainPercentPerHour,
+    devB?.battery?.drainPercentPerHour,
+    false,
+    batteryNote
+  );
+  row(
+    "Free memory at launch (MB)",
+    devA?.freshStart?.availableAfterBytes != null ? Math.round(devA.freshStart.availableAfterBytes / (1024 * 1024)) : null,
+    devB?.freshStart?.availableAfterBytes != null ? Math.round(devB.freshStart.availableAfterBytes / (1024 * 1024)) : null,
+    true,
+    "How much room the game had when it started. Only recorded for a run where the phone was cleared first."
+  );
+  row("Temperature at end (\xB0C)", devA?.thermal?.endC, devB?.thermal?.endC, false);
+  row(
+    "Battery at end (%)",
+    devA?.battery?.endPercent,
+    devB?.battery?.endPercent,
+    null,
+    "Depends on where the charge started, so no verdict - the drain-per-hour row above is the comparable figure."
+  );
+  row(
+    "Combined risk score",
+    a.verdict?.combinedRisk?.value,
+    b.verdict?.combinedRisk?.value,
+    false
+  );
+  row(
+    "Session duration (minutes)",
+    a.session ? Math.round(a.session.durationMs / 6e4) : null,
+    b.session ? Math.round(b.session.durationMs / 6e4) : null,
+    null,
+    "Longer or shorter is neither good nor bad - it is the context every whole-session figure above depends on."
+  );
+  return rows;
+}
+function directionFor(before, after, floor, presence) {
+  if (presence !== "both" || before === null || after === null) return "unknown";
+  if (!isConclusive(before, after, floor)) return floor ? "inconclusive" : "unchanged";
+  if (after === before) return "unchanged";
+  return after > before ? "regressed" : "improved";
+}
+function summarize(report) {
+  const device = report.devices[0];
+  return {
+    analysisId: report.analysisId,
+    gameName: report.subject.gameName,
+    versionName: report.subject.versionName,
+    generatedAt: report.generatedAt,
+    device: device ? `${device.manufacturer} ${device.model}` : "unknown device",
+    deviceRamBytes: device?.totalRamBytes ?? null,
+    androidVersion: device?.androidVersion ?? "?",
+    abi: device?.abi ?? null,
+    startedAt: report.session?.startedAtLocal ?? report.session?.startedAt ?? null,
+    durationMs: report.session?.durationMs ?? 0,
+    markerCount: report.session?.markerCount ?? 0
+  };
+}
+function headlineFor(input) {
+  if (input.blocked) {
+    return input.gates.find((g) => g.level === "block")?.message ?? "These two runs cannot be compared.";
+  }
+  if (input.shared === 0) {
+    return "The two runs share no screens, so nothing can be compared. Use repeat mode to play the same route in both sessions.";
+  }
+  if (input.kills.direction === "regressed") {
+    return "The later run was killed by the OS where the earlier one was not. This is a regression.";
+  }
+  if (input.kills.direction === "improved") {
+    return "The later run survived where the earlier one was killed by the OS.";
+  }
+  const regressed = input.screens.filter((s) => s.direction === "regressed");
+  const improved = input.screens.filter((s) => s.direction === "improved");
+  if (regressed.length > 0) {
+    const worst = regressed.reduce(
+      (w, s) => (s.deltaBytes ?? 0) > (w.deltaBytes ?? 0) ? s : w
+    );
+    return `${regressed.length} screen(s) retain more memory than before; the worst is "${worst.label}". ${improved.length} improved.`;
+  }
+  if (improved.length > 0) {
+    return `${improved.length} screen(s) retain less memory than before, and none got worse.`;
+  }
+  return input.floor ? "No change larger than the measured run-to-run variance across the shared screens." : "No change across the shared screens. No noise floor is established, so small differences cannot be told apart from variance.";
+}
+
+// src/report/previousRun.ts
+var HEADLINE_LABELS = [
+  "Median frame rate (fps)",
+  "Average frame rate (fps)",
+  "Frame rate against its own target (%)",
+  "Stutter (janks per minute)",
+  "Combined risk score"
+];
+function attachPreviousRun(report, config = loadConfig(), logger2) {
+  try {
+    const previous = findPreviousReport(report, config);
+    if (!previous) return;
+    const comparison = compareSessions(previous.report, report);
+    const rows = [];
+    for (const label of HEADLINE_LABELS) {
+      const row = comparison.runtime.find((r) => r.label === label);
+      if (row && (row.before !== null || row.after !== null)) rows.push(row);
+    }
+    for (const row of [comparison.peak, comparison.kills]) {
+      if (row && (row.before !== null || row.after !== null)) rows.push(row);
+    }
+    if (rows.length === 0) return;
+    report.previousRun = {
+      analysisId: previous.report.analysisId,
+      when: previous.createdAt ?? null,
+      device: comparison.before.device || null,
+      blocked: comparison.blocked,
+      caveats: [
+        ...comparison.gates.filter((g) => g.level !== "note").map((g) => g.message),
+        ...comparison.runtimeCaveat ? [comparison.runtimeCaveat] : []
+      ],
+      rows: rows.map((r) => ({
+        label: r.label,
+        before: r.before,
+        after: r.after,
+        direction: r.direction,
+        ...r.note ? { note: r.note } : {}
+      }))
+    };
+    logger2?.info("Attached comparison with the previous run", {
+      previous: previous.report.analysisId,
+      rows: rows.length
+    });
+  } catch (e) {
+    logger2?.warn("Could not attach the previous-run comparison", {
+      error: e instanceof Error ? e.message : String(e)
+    });
+  }
+}
+function findPreviousReport(current, config) {
+  for (const meta of listJobs(config, 200)) {
+    if (meta.gameId !== current.gameId) continue;
+    if (meta.analysisId === current.analysisId) continue;
+    try {
+      const ws = new Workspace(config.workspaceRoot, meta.gameId, meta.analysisId);
+      const raw = ws.readJson("reports", "report.json");
+      if (!raw) continue;
+      const parsed = safeValidateReport(raw);
+      if (!parsed.ok || !parsed.report) continue;
+      return { report: parsed.report, createdAt: meta.createdAt ?? null };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 // src/report/fpsChartSvg.ts
 var MONO = "ui-monospace, SFMono-Regular, Consolas, monospace";
 function esc(value) {
@@ -67150,6 +67657,81 @@ function renderFpsChartSvg(opts) {
   const totalJanks = points.reduce((sum, p) => sum + p.janks, 0);
   out.push(
     `<text x="${(pad.left + width - pad.right) / 2}" y="${height - 7}" fill="${ink}" font-size="9" text-anchor="middle" font-family="${MONO}">frames per second${totalJanks > 0 ? ` \xB7 red marks = stutter (${totalJanks})` : ""}</text>`
+  );
+  out.push("</svg>");
+  return out.join("");
+}
+
+// src/report/frametimeHistogramSvg.ts
+var JANK_MS2 = 83;
+var BIG_JANK_MS2 = 125;
+function renderFrametimeHistogramSvg(opts) {
+  const buckets = (opts.buckets ?? []).filter((b) => b.count > 0 && b.ms > 0).sort((a, b) => a.ms - b.ms);
+  if (buckets.length < 2) return "";
+  const width = opts.width ?? 720;
+  const height = opts.height ?? 190;
+  const pad = { top: 16, right: 30, bottom: 30, left: 42 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const ink = opts.forPrint ? "#1a1a1a" : "#e6edf3";
+  const muted = opts.forPrint ? "#6a6a6a" : "#8b949e";
+  const grid = opts.forPrint ? "#e6e6e6" : "#30363d";
+  const ground = opts.forPrint ? "#ffffff" : "#0e1116";
+  const fine = "#4f9cf9";
+  const jank = "#d29922";
+  const severe = "#cf222e";
+  const minMs = buckets[0].ms;
+  const maxMs = Math.max(buckets[buckets.length - 1].ms, BIG_JANK_MS2 * 1.4);
+  const maxCount = Math.max(...buckets.map((b) => b.count));
+  const logX = (ms) => pad.left + (Math.log10(ms) - Math.log10(minMs)) / (Math.log10(maxMs) - Math.log10(minMs)) * plotW;
+  const barH = (count) => Math.max(3, Math.log10(count + 1) / Math.log10(maxCount + 1) * plotH);
+  const out = [];
+  out.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" role="img" aria-label="Frame time distribution" style="max-width:${width}px;font-family:system-ui,-apple-system,sans-serif">`
+  );
+  out.push(`<rect width="${width}" height="${height}" fill="${ground}"/>`);
+  for (const value of [1, 10, 100, 1e3]) {
+    if (value > maxCount) break;
+    const yy = (pad.top + plotH - barH(value)).toFixed(1);
+    out.push(
+      `<line x1="${pad.left}" y1="${yy}" x2="${width - pad.right}" y2="${yy}" stroke="${grid}" stroke-width="1"/>`
+    );
+    out.push(
+      `<text x="${pad.left - 6}" y="${Number(yy) + 3}" text-anchor="end" font-size="9" fill="${muted}">${value}</text>`
+    );
+  }
+  const guides = [];
+  if (opts.displayHz && opts.displayHz > 0) {
+    guides.push({ ms: 1e3 / opts.displayHz, label: "refresh", color: muted });
+  }
+  guides.push({ ms: JANK_MS2, label: "jank 83ms", color: jank });
+  guides.push({ ms: BIG_JANK_MS2, label: "severe 125ms", color: severe });
+  for (const g of guides) {
+    if (g.ms <= minMs || g.ms >= maxMs) continue;
+    const xx = logX(g.ms).toFixed(1);
+    out.push(
+      `<line x1="${xx}" y1="${pad.top}" x2="${xx}" y2="${pad.top + plotH}" stroke="${g.color}" stroke-width="1" stroke-dasharray="3 3"/>`
+    );
+    out.push(
+      `<text x="${Number(xx) + 3}" y="${pad.top + 8}" font-size="9" fill="${g.color}">${g.label}</text>`
+    );
+  }
+  for (const bucket of buckets) {
+    const h = barH(bucket.count);
+    const xx = logX(bucket.ms);
+    const color = bucket.ms > BIG_JANK_MS2 ? severe : bucket.ms > JANK_MS2 ? jank : fine;
+    out.push(
+      `<rect x="${(xx - 3).toFixed(1)}" y="${(pad.top + plotH - h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="2" fill="${color}"><title>${bucket.ms} ms \xD7 ${bucket.count} frame${bucket.count === 1 ? "" : "s"}</title></rect>`
+    );
+  }
+  for (const ms of [16, 33, 66, 125, 250, 500, 1e3]) {
+    if (ms < minMs || ms > maxMs) continue;
+    out.push(
+      `<text x="${logX(ms).toFixed(1)}" y="${height - 8}" text-anchor="middle" font-size="9" fill="${muted}">${ms}ms</text>`
+    );
+  }
+  out.push(
+    `<text x="${pad.left}" y="${pad.top - 5}" font-size="9" fill="${muted}">frames (log)</text>`
   );
   out.push("</svg>");
   return out.join("");
@@ -68305,6 +68887,7 @@ function renderSnapshot(w, report) {
     w("Frame rate was not measured in this session.");
   }
   w();
+  renderPreviousRun(w, report);
   w("## Device and session");
   w();
   w(`- **Device** \u2014 ${snap.device ?? "No device measured"}`);
@@ -68351,8 +68934,41 @@ function renderVerdict(w, report, isLead) {
   );
   w();
 }
+function renderPreviousRun(w, report) {
+  const p = report.previousRun;
+  if (!p) return;
+  w("## Compared with the previous run");
+  w();
+  w(
+    `Against \`${p.analysisId}\`` + (p.when ? ` from ${p.when.slice(0, 10)}` : "") + (p.device ? ` on ${p.device}` : "") + "."
+  );
+  w();
+  if (p.blocked) {
+    for (const c of p.caveats) w(`> ${c}`);
+    w();
+    return;
+  }
+  const word = {
+    improved: "**better**",
+    regressed: "**worse**",
+    unchanged: "same",
+    inconclusive: "within noise",
+    unknown: "\u2014"
+  };
+  w("| Figure | Previous | This run | Verdict |");
+  w("|---|---|---|---|");
+  for (const r of p.rows) {
+    w(`| ${r.label} | ${r.before ?? "\u2014"} | ${r.after ?? "\u2014"} | ${word[r.direction] ?? "\u2014"} |`);
+  }
+  w();
+  for (const c of p.caveats) {
+    w(`*${c}*`);
+    w();
+  }
+}
 function renderDevices(w, report, isLead) {
   if (report.devices.length === 0) return;
+  renderPreviousRun(w, report);
   w("## Device results");
   w();
   if (isLead) {
@@ -69063,6 +69679,21 @@ function renderFpsChart(w, report) {
       "*Frames per second, measured from the compositor; the dashed line is what the hardware allows. Red marks are stutter \u2014 where one lines up with a memory jump below, it is one event and not two.*"
     );
     w();
+    const histogram = d.fps?.frameBuckets ? renderFrametimeHistogramSvg({
+      buckets: d.fps.frameBuckets,
+      displayHz: d.fps.displayHz,
+      forPrint: false
+    }) : "";
+    if (histogram) {
+      w("### Frame times");
+      w();
+      w(histogram);
+      w();
+      w(
+        "*Every frame in the session by how long it took (both axes logarithmic). A healthy game is one tall bar at its target interval; bars past the 83 ms line are the janks counted above, and anything past 125 ms was a visible freeze.*"
+      );
+      w();
+    }
   }
 }
 var THERMAL_WORD = {
@@ -70142,6 +70773,7 @@ var AnalysisPipeline = class extends import_node_events5.EventEmitter {
         artifacts: this.collectArtifacts(),
         extraLimitations: this.collectLimitations()
       });
+      attachPreviousRun(report, this.config, log2);
       const validation = safeValidateReport(report);
       if (!validation.ok) {
         log2.error("Generated report failed schema validation", {
@@ -70756,6 +71388,7 @@ function renderPrintableHtml(report, audience = "complete", opts = {}) {
   than being forced onto page boundaries, so no page is left half empty.
 -->
 ${renderSummary2(report, audience)}
+${renderPreviousRun2(report)}
 ${isLead ? renderLeadFindings(report) : renderDetailedFindings(report, isComplete)}
 ${renderRuntimeHealth2(report, audience)}
 ${isLead ? "" : renderFrameRate2(report, audience)}
@@ -71226,7 +71859,15 @@ function renderFpsChart2(report) {
       forPrint: true
     });
     if (!svg) return "";
-    return (report.devices.length > 1 ? `<h3>Device ${esc4(d.role)} \u2014 ${esc4(d.model)}</h3>` : "") + `<div class="chart">${svg}</div>`;
+    const histogram = d.fps?.frameBuckets ? renderFrametimeHistogramSvg({
+      buckets: d.fps.frameBuckets,
+      displayHz: d.fps.displayHz,
+      forPrint: true
+    }) : "";
+    return (report.devices.length > 1 ? `<h3>Device ${esc4(d.role)} \u2014 ${esc4(d.model)}</h3>` : "") + `<div class="chart">${svg}</div>` + (histogram ? `<h3>Frame times</h3><div class="chart">${histogram}</div>
+  <p class="caption">Every frame in the session by how long it took (both axes logarithmic). A
+  healthy game is one tall bar at its target interval; bars past the 83 ms line are the janks
+  counted above, and anything past 125 ms was a visible freeze.</p>` : "");
   }).join("");
   if (!charts) return "";
   return `<h3>Over the session</h3>
@@ -71307,6 +71948,31 @@ function renderVerdict2(report, isLead) {
     </tbody>
   </table>
 </section>`;
+}
+function renderPreviousRun2(report) {
+  const p = report.previousRun;
+  if (!p) return "";
+  const header = `<h2>Compared with the previous run</h2><p class="caption">Against <code>${esc4(p.analysisId)}</code>` + (p.when ? ` from ${esc4(p.when.slice(0, 10))}` : "") + (p.device ? ` on ${esc4(p.device)}` : "") + ".</p>";
+  if (p.blocked) {
+    return `<section>${header}${p.caveats.map((c) => `<p class="caption">${esc4(c)}</p>`).join("")}</section>`;
+  }
+  const word = {
+    improved: '<span class="good">better</span>',
+    regressed: '<span class="bad">worse</span>',
+    unchanged: "same",
+    inconclusive: "within noise",
+    unknown: "&mdash;"
+  };
+  const rows = p.rows.map(
+    (r) => `<tr><td>${esc4(r.label)}</td><td class="num">${r.before ?? "&mdash;"}</td><td class="num">${r.after ?? "&mdash;"}</td><td>${word[r.direction] ?? "&mdash;"}</td></tr>`
+  ).join("");
+  const caveats = p.caveats.map((c) => `<p class="caption">${esc4(c)}</p>`).join("");
+  return `<section>${header}
+  <table class="bordered">
+    <thead><tr><th>Figure</th><th class="num">Previous</th><th class="num">This run</th><th>Verdict</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${caveats}</section>`;
 }
 function renderDevices2(report, isLead) {
   if (report.devices.length === 0) return "";
@@ -72521,413 +73187,6 @@ table.delta:not(.bordered) th + th, table.delta:not(.bordered) td + td {
 /* The verdict column, at the right-hand end of the row where it belongs. */
 td.remark-cell { white-space: nowrap; }
 `;
-
-// src/analysis/compareSessions.ts
-function gateComparison(a, b) {
-  const gates = [];
-  const pkgA = a.subject.packageName;
-  const pkgB = b.subject.packageName;
-  if (pkgA && pkgB && pkgA !== pkgB) {
-    gates.push({
-      level: "block",
-      key: "package",
-      message: `Different apps: ${pkgA} and ${pkgB}. There is nothing to compare.`
-    });
-  }
-  const devA = a.devices[0];
-  const devB = b.devices[0];
-  if (!devA || !devB) {
-    gates.push({
-      level: "block",
-      key: "device",
-      message: "One of these runs recorded no device, so there is no live capture to compare."
-    });
-    return gates;
-  }
-  if (devA.model !== devB.model || devA.totalRamBytes !== devB.totalRamBytes) {
-    gates.push({
-      level: "block",
-      key: "device",
-      message: `Different hardware: ${devA.manufacturer} ${devA.model} and ${devB.manufacturer} ${devB.model}. GPU drivers attribute memory differently and the per-app budget changes with RAM, so the figures are not commensurable.`
-    });
-  } else if (devA.serial !== devB.serial) {
-    gates.push({
-      level: "warn",
-      key: "device",
-      message: `Same model but a different handset (${devA.serial} and ${devB.serial}). Driver version and thermal state can differ; treat small changes as noise.`
-    });
-  }
-  if (devA.androidVersion !== devB.androidVersion || devA.sdkInt !== devB.sdkInt) {
-    gates.push({
-      level: "warn",
-      key: "android",
-      message: `Different Android versions (${devA.androidVersion} and ${devB.androidVersion}). The memory categories are aggregated differently between releases, so category-level changes may be the OS rather than the build.`
-    });
-  }
-  const freshA = Boolean(devA.freshStart);
-  const freshB = Boolean(devB.freshStart);
-  if (freshA !== freshB) {
-    gates.push({
-      level: "warn",
-      key: "freshStart",
-      message: `One run started on a cleared phone and the other did not (${freshA ? "earlier" : "later"} was cleared). Memory available at launch differed, so part of any change here is the state of the device rather than the build. Clear the phone in both runs, or neither.`
-    });
-  }
-  const verA = a.subject.versionName ?? "?";
-  const verB = b.subject.versionName ?? "?";
-  if (verA !== verB) {
-    gates.push({
-      level: "note",
-      key: "build",
-      message: `Comparing build ${verA} against ${verB}.`
-    });
-  } else {
-    gates.push({
-      level: "note",
-      key: "build",
-      message: `Both runs are build ${verA}. Differences here are run-to-run variance, which makes this pair usable as a noise-floor baseline.`
-    });
-  }
-  return gates;
-}
-function isBlocked(gates) {
-  return gates.some((g) => g.level === "block");
-}
-function deriveNoiseFloor(a, b) {
-  const rows = joinScreens(a, b);
-  const measurable = rows.filter(
-    (r) => r.beforeRetained !== null && r.afterRetained !== null
-  );
-  if (measurable.length === 0) return null;
-  let worstBytes = 0;
-  let worstFraction = 0;
-  for (const row of measurable) {
-    const delta = Math.abs((row.afterRetained ?? 0) - (row.beforeRetained ?? 0));
-    worstBytes = Math.max(worstBytes, delta);
-    const base2 = Math.abs(row.beforeRetained ?? 0);
-    if (base2 > 0) worstFraction = Math.max(worstFraction, delta / base2);
-  }
-  return {
-    bytes: worstBytes,
-    fraction: worstFraction,
-    source: `Measured from two runs of the same build across ${measurable.length} shared screen(s). Any later change smaller than this cannot be told apart from run-to-run variance.`
-  };
-}
-function isConclusive(before, after, floor) {
-  if (before === null || after === null) return false;
-  if (!floor) return true;
-  const delta = Math.abs(after - before);
-  const relative5 = Math.abs(before) > 0 ? delta / Math.abs(before) : Infinity;
-  return delta > floor.bytes || relative5 > floor.fraction;
-}
-function joinScreens(a, b) {
-  const before = worstByScreen(a);
-  const after = worstByScreen(b);
-  const names = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].sort();
-  return names.map((screen) => {
-    const x = before.get(screen);
-    const y = after.get(screen);
-    return {
-      screen,
-      beforeRetained: x?.retainedBytes ?? null,
-      afterRetained: y?.retainedBytes ?? null,
-      beforePeak: x?.peakBytes ?? null,
-      afterPeak: y?.peakBytes ?? null,
-      presence: x && y ? "both" : x ? "before-only" : "after-only"
-    };
-  });
-}
-function worstByScreen(report) {
-  const out = /* @__PURE__ */ new Map();
-  for (const visit of report.session?.screenVisits ?? []) {
-    const existing = out.get(visit.screen);
-    if (!existing) {
-      out.set(visit.screen, {
-        retainedBytes: visit.retainedBytes,
-        peakBytes: visit.peakBytes
-      });
-      continue;
-    }
-    if ((visit.retainedBytes ?? -Infinity) > (existing.retainedBytes ?? -Infinity)) {
-      existing.retainedBytes = visit.retainedBytes;
-    }
-    if ((visit.peakBytes ?? -Infinity) > (existing.peakBytes ?? -Infinity)) {
-      existing.peakBytes = visit.peakBytes;
-    }
-  }
-  return out;
-}
-function joinCycles(a, b) {
-  const pick = (r) => {
-    const out = /* @__PURE__ */ new Map();
-    for (const cycle of r.session?.cycles ?? []) {
-      const existing = out.get(cycle.label);
-      const value = cycle.recoveryDeltaBytes;
-      if (existing === void 0 || (value ?? -Infinity) > (existing ?? -Infinity)) {
-        out.set(cycle.label, value);
-      }
-    }
-    return out;
-  };
-  const before = pick(a);
-  const after = pick(b);
-  const labels = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].sort();
-  return labels.map((label) => ({
-    label,
-    beforeRecovery: before.get(label) ?? null,
-    afterRecovery: after.get(label) ?? null,
-    presence: before.has(label) && after.has(label) ? "both" : before.has(label) ? "before-only" : "after-only"
-  }));
-}
-var BUDGET_RANK = { green: 0, yellow: 1, red: 2 };
-function compareSessions(a, b, opts = {}) {
-  const gates = gateComparison(a, b);
-  const targets = {
-    before: opts.targetFps?.before ?? null,
-    after: opts.targetFps?.after ?? null
-  };
-  if (targets.before !== null && targets.after !== null && targets.before !== targets.after) {
-    gates.push({
-      level: "warn",
-      key: "targetFps",
-      message: `The two runs aimed at different frame rates (${targets.before} fps and ${targets.after} fps). Their measured rates are not comparable directly - read "Frame rate against its own target" below instead, which is the same question asked of both.`
-    });
-  }
-  const blocked = isBlocked(gates);
-  const floor = opts.noiseFloor ?? null;
-  const screenRows = joinScreens(a, b);
-  const shared = screenRows.filter((r) => r.presence === "both");
-  const screens = screenRows.map((row) => ({
-    label: row.screen,
-    before: row.beforeRetained,
-    after: row.afterRetained,
-    deltaBytes: row.beforeRetained !== null && row.afterRetained !== null ? row.afterRetained - row.beforeRetained : null,
-    direction: directionFor(row.beforeRetained, row.afterRetained, floor, row.presence),
-    ...row.presence !== "both" ? {
-      note: row.presence === "before-only" ? "Only the earlier run visited this screen, so there is nothing to compare it with." : "Only the later run visited this screen."
-    } : {}
-  }));
-  const cycles = joinCycles(a, b).map((row) => ({
-    label: row.label,
-    before: row.beforeRecovery,
-    after: row.afterRecovery,
-    deltaBytes: row.beforeRecovery !== null && row.afterRecovery !== null ? row.afterRecovery - row.beforeRecovery : null,
-    direction: directionFor(row.beforeRecovery, row.afterRecovery, floor, row.presence)
-  }));
-  const devA = a.devices[0];
-  const devB = b.devices[0];
-  const sameGround = shared.length > 0 && screenRows.every((r) => r.presence === "both");
-  const peak = {
-    label: "Session peak",
-    before: devA?.peakBytes ?? null,
-    after: devB?.peakBytes ?? null,
-    deltaBytes: devA?.peakBytes != null && devB?.peakBytes != null ? devB.peakBytes - devA.peakBytes : null,
-    direction: sameGround ? directionFor(devA?.peakBytes ?? null, devB?.peakBytes ?? null, floor, "both") : "unknown",
-    note: sameGround ? "Both runs covered the same screens, so the peaks describe the same workload." : "The two runs did not visit the same screens, so their peaks describe different playthroughs rather than different builds. Use the per-screen rows instead."
-  };
-  const killsBefore = devA?.processDeaths ?? null;
-  const killsAfter = devB?.processDeaths ?? null;
-  const kills = {
-    label: "Process kills",
-    before: killsBefore,
-    after: killsAfter,
-    deltaBytes: killsBefore !== null && killsAfter !== null ? killsAfter - killsBefore : null,
-    // A kill is binary and unambiguous; no noise floor applies.
-    direction: killsBefore === null || killsAfter === null ? "unknown" : killsAfter < killsBefore ? "improved" : killsAfter > killsBefore ? "regressed" : "unchanged"
-  };
-  const budgetBefore = devA?.budget?.verdict ?? null;
-  const budgetAfter = devB?.budget?.verdict ?? null;
-  const budget = {
-    before: budgetBefore,
-    after: budgetAfter,
-    direction: budgetBefore === null || budgetAfter === null ? "unknown" : BUDGET_RANK[budgetAfter] < BUDGET_RANK[budgetBefore] ? "improved" : BUDGET_RANK[budgetAfter] > BUDGET_RANK[budgetBefore] ? "regressed" : "unchanged"
-  };
-  return {
-    before: summarize(a),
-    after: summarize(b),
-    runtime: compareRuntime(a, b, sameGround, targets),
-    runtimeCaveat: sameGround ? null : "The two runs did not cover the same screens, so part of every difference below is the playthrough rather than the build.",
-    gates,
-    blocked,
-    noiseFloor: floor,
-    markerOverlap: {
-      shared: shared.length,
-      beforeOnly: screenRows.filter((r) => r.presence === "before-only").length,
-      afterOnly: screenRows.filter((r) => r.presence === "after-only").length
-    },
-    screens,
-    cycles,
-    peak,
-    kills,
-    budget,
-    headline: headlineFor({ blocked, gates, screens, kills, budget, shared: shared.length, floor })
-  };
-}
-function compareRuntime(a, b, _sameGround, targets) {
-  const devA = a.devices[0];
-  const devB = b.devices[0];
-  const rows = [];
-  const row = (label, before, after, higherIsBetter, note) => {
-    const x = before ?? null;
-    const y = after ?? null;
-    const delta = x !== null && y !== null ? y - x : null;
-    let direction = "unknown";
-    if (delta !== null && higherIsBetter !== null) {
-      if (delta === 0) direction = "unchanged";
-      else direction = delta > 0 === higherIsBetter ? "improved" : "regressed";
-    }
-    rows.push({
-      label,
-      before: x,
-      after: y,
-      deltaBytes: delta,
-      direction,
-      ...note ? { note } : {}
-    });
-  };
-  const fpsA = devA?.fps?.averageFps ?? null;
-  const fpsB = devB?.fps?.averageFps ?? null;
-  const differentTargets = targets.before !== null && targets.after !== null && targets.before !== targets.after;
-  if (differentTargets) {
-    rows.push({
-      label: "Average frame rate (fps)",
-      before: fpsA,
-      after: fpsB,
-      deltaBytes: fpsA !== null && fpsB !== null ? fpsB - fpsA : null,
-      direction: "unknown",
-      note: `Not comparable directly: these runs aimed at ${targets.before} and ${targets.after} fps. The achievement row below asks the same question of both.`
-    });
-  } else {
-    row("Average frame rate (fps)", fpsA, fpsB, true);
-  }
-  if (targets.before !== null || targets.after !== null) {
-    rows.push({
-      label: "Target frame rate (fps)",
-      before: targets.before,
-      after: targets.after,
-      deltaBytes: null,
-      // A target is a decision, not an outcome, so neither value is "better".
-      direction: "unknown",
-      note: "What each build was aiming for, as supplied by the operator - not measured."
-    });
-    const achieved = (fps, target) => fps !== null && target !== null && target > 0 ? Math.round(fps / target * 100) : null;
-    const pctA = achieved(fpsA, targets.before);
-    const pctB = achieved(fpsB, targets.after);
-    let direction = "unknown";
-    if (pctA !== null && pctB !== null) {
-      const missA = Math.abs(100 - pctA);
-      const missB = Math.abs(100 - pctB);
-      direction = missB === missA ? "unchanged" : missB < missA ? "improved" : "regressed";
-    }
-    rows.push({
-      label: "Frame rate against its own target (%)",
-      before: pctA,
-      after: pctB,
-      deltaBytes: pctA !== null && pctB !== null ? pctB - pctA : null,
-      direction,
-      note: "The comparable figure when the targets differ. 100% is the build doing exactly what it set out to do; below that is stutter, and above it means a frame-rate cap is not applying - which costs battery and heat for frames nobody asked for."
-    });
-  }
-  row("Median frame rate (fps)", devA?.fps?.medianFps, devB?.fps?.medianFps, true);
-  row("Worst 1% of frames (fps)", devA?.fps?.low1PercentFps, devB?.fps?.low1PercentFps, true);
-  row("Stutter (janks per minute)", devA?.fps?.janksPerMinute, devB?.fps?.janksPerMinute, false);
-  row("Severe janks", devA?.fps?.bigJanks, devB?.fps?.bigJanks, false);
-  row("Longest single frame (ms)", devA?.fps?.longestFrameMs, devB?.fps?.longestFrameMs, false);
-  row(
-    "Screen refresh rate (Hz)",
-    devA?.fps?.displayHz,
-    devB?.fps?.displayHz,
-    null,
-    "A property of the phone, not of the build. Included so the frame rates above can be read against it."
-  );
-  row("Peak temperature (\xB0C)", devA?.thermal?.peakC, devB?.thermal?.peakC, false);
-  row("Temperature rise (\xB0C)", devA?.thermal?.riseC, devB?.thermal?.riseC, false);
-  const batteryNote = devA?.battery?.unavailableReason ?? devB?.battery?.unavailableReason ?? void 0;
-  row(
-    "Battery used (% per hour)",
-    devA?.battery?.drainPercentPerHour,
-    devB?.battery?.drainPercentPerHour,
-    false,
-    batteryNote
-  );
-  row(
-    "Free memory at launch (MB)",
-    devA?.freshStart?.availableAfterBytes != null ? Math.round(devA.freshStart.availableAfterBytes / (1024 * 1024)) : null,
-    devB?.freshStart?.availableAfterBytes != null ? Math.round(devB.freshStart.availableAfterBytes / (1024 * 1024)) : null,
-    true,
-    "How much room the game had when it started. Only recorded for a run where the phone was cleared first."
-  );
-  row("Temperature at end (\xB0C)", devA?.thermal?.endC, devB?.thermal?.endC, false);
-  row(
-    "Battery at end (%)",
-    devA?.battery?.endPercent,
-    devB?.battery?.endPercent,
-    null,
-    "Depends on where the charge started, so no verdict - the drain-per-hour row above is the comparable figure."
-  );
-  row(
-    "Combined risk score",
-    a.verdict?.combinedRisk?.value,
-    b.verdict?.combinedRisk?.value,
-    false
-  );
-  row(
-    "Session duration (minutes)",
-    a.session ? Math.round(a.session.durationMs / 6e4) : null,
-    b.session ? Math.round(b.session.durationMs / 6e4) : null,
-    null,
-    "Longer or shorter is neither good nor bad - it is the context every whole-session figure above depends on."
-  );
-  return rows;
-}
-function directionFor(before, after, floor, presence) {
-  if (presence !== "both" || before === null || after === null) return "unknown";
-  if (!isConclusive(before, after, floor)) return floor ? "inconclusive" : "unchanged";
-  if (after === before) return "unchanged";
-  return after > before ? "regressed" : "improved";
-}
-function summarize(report) {
-  const device = report.devices[0];
-  return {
-    analysisId: report.analysisId,
-    gameName: report.subject.gameName,
-    versionName: report.subject.versionName,
-    generatedAt: report.generatedAt,
-    device: device ? `${device.manufacturer} ${device.model}` : "unknown device",
-    deviceRamBytes: device?.totalRamBytes ?? null,
-    androidVersion: device?.androidVersion ?? "?",
-    abi: device?.abi ?? null,
-    startedAt: report.session?.startedAtLocal ?? report.session?.startedAt ?? null,
-    durationMs: report.session?.durationMs ?? 0,
-    markerCount: report.session?.markerCount ?? 0
-  };
-}
-function headlineFor(input) {
-  if (input.blocked) {
-    return input.gates.find((g) => g.level === "block")?.message ?? "These two runs cannot be compared.";
-  }
-  if (input.shared === 0) {
-    return "The two runs share no screens, so nothing can be compared. Use repeat mode to play the same route in both sessions.";
-  }
-  if (input.kills.direction === "regressed") {
-    return "The later run was killed by the OS where the earlier one was not. This is a regression.";
-  }
-  if (input.kills.direction === "improved") {
-    return "The later run survived where the earlier one was killed by the OS.";
-  }
-  const regressed = input.screens.filter((s) => s.direction === "regressed");
-  const improved = input.screens.filter((s) => s.direction === "improved");
-  if (regressed.length > 0) {
-    const worst = regressed.reduce(
-      (w, s) => (s.deltaBytes ?? 0) > (w.deltaBytes ?? 0) ? s : w
-    );
-    return `${regressed.length} screen(s) retain more memory than before; the worst is "${worst.label}". ${improved.length} improved.`;
-  }
-  if (improved.length > 0) {
-    return `${improved.length} screen(s) retain less memory than before, and none got worse.`;
-  }
-  return input.floor ? "No change larger than the measured run-to-run variance across the shared screens." : "No change across the shared screens. No noise floor is established, so small differences cannot be told apart from variance.";
-}
 
 // src/report/comparison.ts
 var MB5 = 1024 * 1024;

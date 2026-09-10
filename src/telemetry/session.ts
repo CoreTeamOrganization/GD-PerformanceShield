@@ -154,6 +154,8 @@ export interface LiveStatus {
     fpsMatchesDisplayRate: boolean | null;
     /** How frame rate is being measured on this device. */
     fpsSource: string | null;
+    /** A second profiler is clearing SurfaceFlinger stats; readings are degraded. */
+    fpsInterference: boolean;
     /** When it cannot be measured, what was tried and what came back. */
     fpsDiagnostics: Array<{ strategy: string; ok: boolean; detail: string }>;
     /** Hottest zone right now, and whether the framework is throttling. */
@@ -505,6 +507,7 @@ export class CaptureSession extends EventEmitter {
             null,
           fpsMatchesDisplayRate: r.fpsReadings.at(-1)?.matchesDisplayRate ?? null,
           fpsSource: r.sampler.frameRateSource,
+          fpsInterference: r.sampler.frameRateInterference,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,
           temperatureC:
             r.healthSamples.at(-1)?.thermal?.maxZoneC ??

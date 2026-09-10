@@ -13,6 +13,7 @@ import {
   parseFrameHistogram,
   summarizeFrames,
   type FrameStats,
+  windowLooksTruncated,
 } from '../src/telemetry/fps.js';
 import {
   RATING_LABEL,
@@ -375,5 +376,47 @@ describe('cross-tool jank estimate', () => {
     expect(stats.crossToolJanks).toBe(23);
     expect(stats.janks).toBe(3);
     expect(stats.bigJanks).toBe(3);
+  });
+});
+
+/**
+ * The integrity gate for windows truncated by a foreign TimeStats clear.
+ *
+ * Cases replay the measured corruption: GameBench attached to the same device
+ * cleared SurfaceFlinger's counters mid-window, and the diff then held one or
+ * two ordinary 33 ms frames against a full second of window - "3 fps" on a game
+ * visibly running at 55. The gate's contract: discard those, keep every window
+ * a slow or stalling game can genuinely produce.
+ */
+describe('truncated-window detection', () => {
+  it('discards the measured corrupt windows: a frame or two and a second of nothing', () => {
+    // Straight from the field session: 1 frame of 33 ms in an 1111 ms window.
+    expect(windowLooksTruncated([{ ms: 33, count: 1 }], 1111)).toBe(true);
+    // 2 frames of 33 ms in 1102 ms.
+    expect(windowLooksTruncated([{ ms: 33, count: 2 }], 1102)).toBe(true);
+  });
+
+  it('keeps a genuinely slow game - its intervals account for the window', () => {
+    // 20 fps: fifty-ms intervals cover the whole second.
+    expect(windowLooksTruncated([{ ms: 50, count: 20 }], 1050)).toBe(false);
+    // 5 fps of real, steady slowness: 200 ms intervals.
+    expect(windowLooksTruncated([{ ms: 200, count: 5 }], 1080)).toBe(false);
+  });
+
+  it('keeps a real freeze - the missing time is in the histogram as one long interval', () => {
+    expect(
+      windowLooksTruncated(
+        [
+          { ms: 16, count: 5 },
+          { ms: 1000, count: 1 },
+        ],
+        1100,
+      ),
+    ).toBe(false);
+  });
+
+  it('proves nothing on a tiny window or an empty histogram', () => {
+    expect(windowLooksTruncated([{ ms: 33, count: 1 }], 200)).toBe(false);
+    expect(windowLooksTruncated([], 1100)).toBe(false);
   });
 });

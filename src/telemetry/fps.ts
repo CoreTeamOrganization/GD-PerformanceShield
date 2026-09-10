@@ -219,6 +219,23 @@ export class FpsSampler {
   private layer: string | null = null;
   private timeStatsLayer: string | null = null;
   private source: FpsSource | null = null;
+  /**
+   * Signs of another profiler sharing SurfaceFlinger TimeStats.
+   *
+   * TimeStats is one global counter set per device. A second tool (GameBench's
+   * probe does exactly this) clears it on its own schedule, and a diff taken
+   * across a foreign clear counts only the frames since *their* reset - a game
+   * running at 55 fps reads as 3. Measured live on a Xiaomi with GameBench
+   * attached: 33 of 154 windows carried 1-10 frames whose own histograms held
+   * nothing longer than 33 ms - physically impossible as real readings, since a
+   * 1-frame second must contain a ~1000 ms interval. Truncated windows are
+   * discarded (see `windowLooksTruncated`), backwards counters re-baseline, and
+   * both are counted here so the operator can be told to run one profiler at a
+   * time instead of being handed a jagged chart.
+   */
+  private truncatedWindows = 0;
+  private counterResets = 0;
+  private interferenceWarned = false;
   private lastGfx: { counters: GfxInfoCounters; at: number } | null = null;
   private lastTimeStatsAt = 0;
   /**
@@ -248,6 +265,11 @@ export class FpsSampler {
   /** What was tried, and why each one did or did not work. */
   get diagnostics(): FpsAttempt[] {
     return this.attempts;
+  }
+
+  /** True once enough corrupt windows have been seen to blame a second profiler. */
+  get interferenceSuspected(): boolean {
+    return this.truncatedWindows + this.counterResets >= 3;
   }
 
   private note(strategy: string, ok: boolean, detail: string): void {
@@ -466,6 +488,8 @@ export class FpsSampler {
     if (prev === null) return null;
 
     if (now.totalFrames < prev.totalFrames || now.droppedFrames < prev.droppedFrames) {
+      this.counterResets++;
+      this.warnOnInterference();
       this.logger?.debug('Frame counters went backwards; re-baselining', {
         was: prev.totalFrames,
         now: now.totalFrames,
@@ -548,6 +572,19 @@ export class FpsSampler {
 
     if (mine === null || cumulative === null || mine.totalFrames === 0) return null;
 
+    /*
+     * Integrity gate: a window whose own frames cannot account for its duration
+     * is a truncated diff, not a slow game - report nothing rather than 3 fps
+     * for a game visibly running at 55. See the field comment on
+     * `truncatedWindows` for the mechanism (a second profiler clearing
+     * TimeStats) and the measured case.
+     */
+    if (windowLooksTruncated(mine.buckets, windowMs)) {
+      this.truncatedWindows++;
+      this.warnOnInterference();
+      return null;
+    }
+
     // Remembered only for reporting which surface the figures came from; the
     // choice above is made afresh every read.
     this.timeStatsLayer = cumulative.layer;
@@ -629,10 +666,51 @@ export class FpsSampler {
     };
   }
 
+  private warnOnInterference(): void {
+    if (this.interferenceWarned || !this.interferenceSuspected) return;
+    this.interferenceWarned = true;
+    this.note(
+      'SurfaceFlinger TimeStats',
+      true,
+      'Another profiler appears to be clearing SurfaceFlinger statistics during the session ' +
+        '(GameBench does this). Corrupt windows are being discarded rather than reported wrong - ' +
+        'run one profiler at a time for a full-resolution session.',
+    );
+    this.logger?.warn(
+      'TimeStats counters are being reset by another process - a second profiler is probably ' +
+        'attached. Corrupt frame-rate windows are discarded; run one profiler at a time.',
+      { truncatedWindows: this.truncatedWindows, counterResets: this.counterResets },
+    );
+  }
+
   /** Leave TimeStats as we found it, so the tool costs the device nothing after. */
   async release(): Promise<void> {
     if (this.source === 'timestats') await this.timeStats(['-disable']);
   }
+}
+
+/**
+ * A window whose frames cannot account for its duration.
+ *
+ * The counted frames' intervals cover a small fraction of the window AND no
+ * single interval is long enough to be the missing time. A genuinely slow or
+ * stalling game always fails one of the two: a 20 fps game's fifty 50 ms
+ * intervals cover the second, and a real one-second freeze puts a ~1000 ms
+ * interval in the histogram. Only a diff truncated by a foreign counter reset
+ * produces "two 33 ms frames and 1050 ms of nothing".
+ */
+export function windowLooksTruncated(
+  buckets: Array<{ ms: number; count: number }>,
+  windowMs: number,
+): boolean {
+  if (windowMs < 400 || buckets.length === 0) return false;
+  let covered = 0;
+  let longest = 0;
+  for (const b of buckets) {
+    covered += b.ms * b.count;
+    if (b.ms > longest) longest = b.ms;
+  }
+  return covered < windowMs * 0.35 && longest < windowMs * 0.4;
 }
 
 // ---------------------------------------------------------------------------

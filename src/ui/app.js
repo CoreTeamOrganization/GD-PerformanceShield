@@ -1171,6 +1171,13 @@ function renderDeviceCards(status) {
             ? `<div class="stat-missing">at the screen's ${d.fpsDisplayHz} Hz &mdash; any frame cap is not applying</div>`
             : ''
         }
+        ${
+          d.fpsInterference
+            ? '<div class="stat-missing" style="color:var(--warn)">&#9888; another profiler is ' +
+              'clearing the frame counters (GameBench?) &mdash; corrupt readings are being ' +
+              'discarded. Run one profiler at a time.</div>'
+            : ''
+        }
         ${fpsNote(d)}
         <div class="meta">
           <span>Peak: ${(d.peakPssBytes / MB).toFixed(0)} MB</span>

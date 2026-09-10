@@ -116,6 +116,11 @@ export class MemorySampler extends EventEmitter {
     return this.fpsDiagnostics;
   }
 
+  /** True when a second profiler seems to be clearing SurfaceFlinger stats. */
+  get frameRateInterference(): boolean {
+    return this.fps?.interferenceSuspected ?? false;
+  }
+
   /**
    * What each subsystem probe managed, for the manifest and the report's
    * limitations section.
