@@ -221,11 +221,15 @@ export function findSpikes(
 
     const previous = spikes[spikes.length - 1];
     if (previous && current.elapsedMs - previous.atMs <= thresholds.spikeWindowMs * 2) {
-      // Extend the existing spike rather than emitting a duplicate.
+      // Extend the existing spike rather than emitting a duplicate. The window
+      // grows with the extension: the spike still starts where it started, and
+      // reporting a 25 s rise over its first 8 s window would overstate the
+      // rate threefold. (The start is computed before atMs moves.)
+      const startMs = previous.atMs - previous.windowMs;
       previous.toBytes = Math.max(previous.toBytes, current.value);
       previous.deltaBytes = previous.toBytes - previous.fromBytes;
       previous.atMs = current.elapsedMs;
-      previous.windowMs = current.elapsedMs - previous.windowMs >= 0 ? previous.windowMs : previous.windowMs;
+      previous.windowMs = Math.max(previous.windowMs, current.elapsedMs - startMs);
       continue;
     }
 
@@ -457,7 +461,12 @@ function detectProcessTermination(
   const killLogs = timeline.logs.filter(
     (l) => l.category === 'oom_kill' && concernsApp(l, packageName),
   );
-  const crashLogs = timeline.logs.filter((l) => l.category === 'crash');
+  // Gated by concernsApp exactly like the kills above: without known pids the
+  // logcat capture keeps every process's lines, and another app's FATAL
+  // EXCEPTION must not become this game's "confirmed" crash.
+  const crashLogs = timeline.logs.filter(
+    (l) => l.category === 'crash' && concernsApp(l, packageName),
+  );
 
   for (const summary of perDevice) {
     const deviceDeaths = deathEvents.filter((e) => !e.serial || e.serial === summary.serial);

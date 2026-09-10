@@ -198,6 +198,34 @@ function classifyFromThreadTimes(
   const worst = stages[0]!;
   const runnerUp = stages[1];
 
+  /*
+   * A stage can only be the bound if it comes near to filling the frame.
+   *
+   * The header says the pace-setter is whichever stage is closest to the frame
+   * interval, and this is where that comparison actually happens. Without it, a
+   * healthy 30 fps-capped game averaging main 6 ms / render 4 ms / GPU 3 ms was
+   * reported as "limited by the main thread" at high confidence - naming the
+   * tallest of three idle stages, and sending a studio after a frame they
+   * already had. Everything well under the budget means the rate is being set
+   * by a cap, vsync or a sleep, and that is the finding.
+   */
+  if (budget.targetMs != null && worst.ms < budget.targetMs * 0.7) {
+    return {
+      kind: 'balanced',
+      headline: 'No stage fills the frame - the rate is set by a cap or vsync, not the hardware.',
+      reason:
+        `The longest stage, ${worst.label}, took ${worst.ms} ms of the ${budget.targetMs} ms one ` +
+        'frame is allowed - every stage has headroom. A rate below the panel with this much ' +
+        'headroom usually means a frame cap, vsync, or a sleep in the game loop.',
+      confidence: 0.7,
+    };
+  }
+
+  // One stage and nothing to compare it to - neither a runner-up nor a frame
+  // budget. Naming it the bound would be a claim with no comparison behind it,
+  // so fall through to the OS signals instead.
+  if (!runnerUp && budget.targetMs == null) return null;
+
   const overTarget =
     budget.targetMs != null && worst.ms > budget.targetMs
       ? ` That is over the ${budget.targetMs} ms one frame is allowed at this refresh rate.`

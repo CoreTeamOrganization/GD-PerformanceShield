@@ -648,3 +648,56 @@ describe('the CI quality gate', () => {
     expect(lenient.summary.failed).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression pins for the review fixes: each of these was a claim the
+// surrounding comment promised and the arithmetic did not deliver.
+// ---------------------------------------------------------------------------
+
+describe('review regression pins', () => {
+  it('does not name a bound when every stage has frame-budget headroom', () => {
+    // A healthy 30 fps-capped game on a 60 Hz panel: main 6 ms, render 4 ms,
+    // GPU 3 ms against a 16.67 ms budget. Naming the tallest of three idle
+    // stages sent a studio after a frame they already had - the finding is the
+    // cap, not the main thread.
+    const verdict = classifyBottleneck({
+      ...nothing,
+      fps: fps({ medianFps: 30, typicalFrameFps: 30 }),
+      render: render({ averageMainThreadMs: 6, averageRenderThreadMs: 4, averageGpuFrameMs: 3 }),
+    });
+
+    expect(verdict.kind).toBe('balanced');
+    expect(verdict.headline).toContain('cap or vsync');
+  });
+
+  it('a slow SoC demotes one tier, not two', () => {
+    // 8 GB of RAM whose sysfs read returns 1.8 GHz: mid-range in a generous
+    // shell. Sequential demotion ifs once dropped it high -> mid -> low, and a
+    // regressed build then passed the quality gate against a 30 fps bar.
+    const tier = classifyDeviceTier({ totalRamBytes: 8 * GB, maxCoreMhz: 1800 });
+    expect(tier.tier).toBe('mid');
+  });
+
+  it('a draw-call jump outranks the stage time even with no memory spike', () => {
+    // The stage time is a restatement of the symptom; the change is the cause a
+    // developer can act on. With nothing else moving, the 7x draw-call jump
+    // must lead and the stage line sits under it saying where to look.
+    const [worst] = diagnose({
+      ...EMPTY_INPUT,
+      fpsSeries: COLLAPSING_CURVE,
+      renderSeries: [
+        { elapsedMs: 0, drawCalls: 300, gpuFrameMs: 8 },
+        { elapsedMs: 40_000, drawCalls: 310, gpuFrameMs: 8 },
+        { elapsedMs: 60_000, drawCalls: 290, gpuFrameMs: 9 },
+        { elapsedMs: 76_000, drawCalls: 2140, gpuFrameMs: 58.4 },
+        { elapsedMs: 120_000, drawCalls: 305, gpuFrameMs: 8 },
+      ],
+    })!;
+
+    expect(worst.causes[0]!.subsystem).toBe('rendering');
+    expect(worst.causes[0]!.statement).toContain('draw calls');
+    const stage = worst.causes.find((c) => c.subsystem === 'gpu');
+    expect(stage).toBeDefined();
+    expect(stage!.weight).toBeLessThan(worst.causes[0]!.weight);
+  });
+});

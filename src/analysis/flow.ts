@@ -438,9 +438,13 @@ function screenFindings(visits: ScreenVisit[], threshold: number, role: string):
     const meanRetained = retained.reduce((a, b) => a + b, 0) / retained.length;
     if (meanRetained <= threshold) continue;
 
-    const peakCost = Math.max(
-      ...screenVisits.map((v) => (v.peakBytes ?? 0) - (v.openBytes ?? 0)),
-    );
+    // Only visits where both ends were actually read: a null peak defaulted to
+    // zero made this "cost about -450.0 MB" - a peak that was never sampled is
+    // not a peak of zero.
+    const costs = screenVisits
+      .filter((v) => v.peakBytes != null && v.openBytes != null)
+      .map((v) => v.peakBytes! - v.openBytes!);
+    const peakCost = costs.length > 0 ? Math.max(...costs) : null;
 
     findings.push({
       ruleId: 'LIVE.SCREEN_RETENTION',
@@ -448,7 +452,9 @@ function screenFindings(visits: ScreenVisit[], threshold: number, role: string):
       source: 'live',
       title: `"${screen}" keeps ${fmtMb(meanRetained)} after being closed (Device ${role})`,
       description:
-        `Opening "${screen}" cost about ${fmtMb(peakCost)}, and ${fmtMb(meanRetained)} of that was still ` +
+        (peakCost !== null && peakCost > 0
+          ? `Opening "${screen}" cost about ${fmtMb(peakCost)}, and ${fmtMb(meanRetained)} of that was still `
+          : `"${screen}" left memory ${fmtMb(meanRetained)} higher than before it opened, still `) +
         `held after it was closed` +
         (screenVisits.length > 1 ? `, consistently across ${screenVisits.length} visits` : '') +
         '. Closing a screen should return it to roughly the memory level it started from.',

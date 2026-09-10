@@ -245,6 +245,8 @@ export function diagnose(input: DiagnosticsInput): Diagnosis[] {
  */
 function gatherCauses(input: DiagnosticsInput, atMs: number): DiagnosticCause[] {
   const causes: DiagnosticCause[] = [];
+  // The stage-time cause, held back until every other cause is weighed.
+  let stageCause: DiagnosticCause | null = null;
   const near = (ms: number) => Math.abs(ms - atMs) <= COINCIDENCE_TOLERANCE_MS;
 
   // Memory. A spike is already the largest jump between two deep samples, and
@@ -320,11 +322,12 @@ function gatherCauses(input: DiagnosticsInput, atMs: number): DiagnosticCause[] 
       .filter((s): s is [Subsystem, string, number] => typeof s[2] === 'number')
       .sort((a, b) => b[2] - a[2])[0];
     if (worst && worst[2] >= 25) {
-      causes.push({
+      // Weight assigned at the end, once every other cause is known - see below.
+      stageCause = {
         subsystem: worst[0],
         statement: `${worst[1]} took ${worst[2].toFixed(1)} ms for that frame`,
-        weight: 0.8,
-      });
+        weight: 0,
+      };
     }
   }
 
@@ -402,6 +405,20 @@ function gatherCauses(input: DiagnosticsInput, atMs: number): DiagnosticCause[] 
     });
   }
 
+  /*
+   * The stage time joins last, weighted to sit just below the strongest change
+   * it points at - which is what the comment above it promises, and what a flat
+   * 0.8 failed to deliver: it outranked a 7x draw-call jump (capped at 0.75)
+   * and every memory rise under ~200 MB, so the conclusion named the symptom
+   * ("the GPU took 58 ms") over the change that caused it. Alone, or with only
+   * weak coincidences beside it, it keeps its old standing.
+   */
+  if (stageCause) {
+    const strongest = causes.reduce((m, c) => Math.max(m, c.weight), 0);
+    stageCause.weight = strongest >= 0.4 ? Math.max(0.3, strongest - 0.05) : 0.8;
+    causes.push(stageCause);
+  }
+
   causes.sort((a, b) => b.weight - a.weight);
   // Four is enough to name a cause and its context; more reads as a list of
   // everything that happened, which is what a raw log already is.
@@ -443,10 +460,17 @@ function buildDiagnosis(
         `Most likely cause: ${SUBSYSTEM_CAUSE[causes[0]!.subsystem]}. ` +
         'These readings coincide; the tool does not prove one caused the other.';
 
+  /*
+   * Capped at 0.9 so the ladder's "confirmed" stays out of reach of any
+   * inference, but 0.85 - the "high" band - is genuinely reachable: with the
+   * old 0.4 multiplier the arithmetic topped out at 0.84, one hundredth under
+   * the band, so no diagnosis could ever earn the label the confidence module
+   * describes as correlation's honest ceiling.
+   */
   const confidence =
     causes.length === 0
       ? 0.2
-      : clamp01(0.35 + causes[0]!.weight * 0.4 + (causes.length - 1) * 0.05);
+      : Math.min(0.9, clamp01(0.35 + causes[0]!.weight * 0.45 + (causes.length - 1) * 0.05));
 
   return {
     id: `diag_${input.role}_${index + 1}`,

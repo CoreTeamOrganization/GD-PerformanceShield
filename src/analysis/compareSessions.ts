@@ -552,11 +552,16 @@ function compareRuntime(
 
   // No per-row workload note: it is identical on every row and is stated once
   // above the table instead. See `runtimeCaveat`.
+  // `higherIsBetter: null` marks a context row - a figure with no better or
+  // worse direction (the panel's refresh rate, how long the run lasted). Those
+  // never get an improved/regressed verdict: the reader believes the colour
+  // over the sentence, so a green arrow beside a note saying "neither good nor
+  // bad" is a contradiction. Same rule the different-targets row already uses.
   const row = (
     label: string,
     before: number | null | undefined,
     after: number | null | undefined,
-    higherIsBetter: boolean,
+    higherIsBetter: boolean | null,
     note?: string,
   ) => {
     const x = before ?? null;
@@ -564,7 +569,7 @@ function compareRuntime(
     const delta = x !== null && y !== null ? y - x : null;
 
     let direction: ChangeDirection = 'unknown';
-    if (delta !== null) {
+    if (delta !== null && higherIsBetter !== null) {
       if (delta === 0) direction = 'unchanged';
       else direction = delta > 0 === higherIsBetter ? 'improved' : 'regressed';
     }
@@ -649,7 +654,7 @@ function compareRuntime(
   row('Stutter (janks per minute)', devA?.fps?.janksPerMinute, devB?.fps?.janksPerMinute, false);
   row('Severe janks', devA?.fps?.bigJanks, devB?.fps?.bigJanks, false);
   row('Longest single frame (ms)', devA?.fps?.longestFrameMs, devB?.fps?.longestFrameMs, false);
-  row('Screen refresh rate (Hz)', devA?.fps?.displayHz, devB?.fps?.displayHz, true,
+  row('Screen refresh rate (Hz)', devA?.fps?.displayHz, devB?.fps?.displayHz, null,
     'A property of the phone, not of the build. Included so the frame rates above can be read ' +
       'against it.');
   row('Peak temperature (°C)', devA?.thermal?.peakC, devB?.thermal?.peakC, false);
@@ -682,7 +687,14 @@ function compareRuntime(
       'cleared first.',
   );
   row('Temperature at end (°C)', devA?.thermal?.endC, devB?.thermal?.endC, false);
-  row('Battery at end (%)', devA?.battery?.endPercent, devB?.battery?.endPercent, true);
+  row(
+    'Battery at end (%)',
+    devA?.battery?.endPercent,
+    devB?.battery?.endPercent,
+    null,
+    'Depends on where the charge started, so no verdict - the drain-per-hour row above is the ' +
+      'comparable figure.',
+  );
   row(
     'Combined risk score',
     a.verdict?.combinedRisk?.value,
@@ -693,7 +705,7 @@ function compareRuntime(
     'Session duration (minutes)',
     a.session ? Math.round(a.session.durationMs / 60_000) : null,
     b.session ? Math.round(b.session.durationMs / 60_000) : null,
-    true,
+    null,
     'Longer or shorter is neither good nor bad - it is the context every whole-session figure ' +
       'above depends on.',
   );

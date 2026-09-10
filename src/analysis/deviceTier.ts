@@ -80,12 +80,16 @@ export function classifyDeviceTier(spec: DeviceSpec): TierThresholds {
 
   if (mhz !== null) {
     reasons.push(`fastest core ${(mhz / 1000).toFixed(1)} GHz`);
-    // A slow SoC drops the tier; a fast one can raise a mid device but never
-    // lifts a 3 GB phone to flagship, because memory pressure will decide that
-    // device's fate whatever the chip can do.
-    if (mhz < 2000 && tier === 'high') tier = 'mid';
-    if (mhz < 1900 && tier === 'mid') tier = 'low';
-    if (mhz >= 2900 && tier === 'mid' && gb > 5) tier = 'high';
+    // A slow SoC drops the tier - one tier, judged against where the RAM put
+    // it; a fast one can raise a mid device but never lifts a 3 GB phone to
+    // flagship, because memory pressure will decide that device's fate whatever
+    // the chip can do. (Sequential ifs here once double-demoted: an 8 GB phone
+    // whose sysfs read returned 1.8 GHz fell high -> mid -> low and was then
+    // graded against a 30 fps bar on flagship hardware.)
+    const ramTier = tier;
+    if (mhz < 2000 && ramTier === 'high') tier = 'mid';
+    else if (mhz < 1900 && ramTier === 'mid') tier = 'low';
+    else if (mhz >= 2900 && ramTier === 'mid' && gb > 5) tier = 'high';
   }
 
   if (spec.coreCount != null) reasons.push(`${spec.coreCount} cores`);
