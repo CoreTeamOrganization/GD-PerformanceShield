@@ -1,4 +1,4 @@
-# Logs
+﻿# Logs
 logs
 *.log
 npm-debug.log*
@@ -143,4 +143,4 @@ dist-desktop/
 dist-exe/
 
 # Analysis run workspaces (device telemetry + generated reports)
-analysis/
+/analysis/
