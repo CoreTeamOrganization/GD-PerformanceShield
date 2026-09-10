@@ -11,6 +11,8 @@ import { DeviceError } from '../core/errors.js';
 import { run, type RunResult } from '../core/exec.js';
 import type { Logger } from '../core/logger.js';
 
+import { ensureManagedAdb } from './adbProvision.js';
+
 export interface AdbDeviceListing {
   serial: string;
   state: 'device' | 'offline' | 'unauthorized' | 'bootloader' | 'recovery' | 'unknown';
@@ -18,28 +20,57 @@ export interface AdbDeviceListing {
 }
 
 export class Adb {
-  constructor(
-    readonly adbPath: string,
-    private readonly logger?: Logger,
-  ) {}
+  private path: string;
+  /** One provisioning attempt per process - a failing download must not retry per call. */
+  private provisioning: Promise<string> | null = null;
 
-  /** Run a raw adb command with no device target (e.g. `devices`, `start-server`). */
+  constructor(
+    adbPath: string,
+    private readonly logger?: Logger,
+  ) {
+    this.path = adbPath;
+  }
+
+  /** The binary in use - self-heals to the managed copy when nothing was installed. */
+  get adbPath(): string {
+    return this.path;
+  }
+
+  /**
+   * Run a raw adb command with no device target (e.g. `devices`, `start-server`).
+   *
+   * When the binary does not exist at all, the tool provisions its own copy of
+   * platform-tools (see adbProvision.ts) and retries once, so an operator on a
+   * clean machine never has to install anything. Only when that also fails does
+   * the manual-install story surface - as words, not as "spawn adb ENOENT".
+   */
   async raw(args: string[], timeoutMs = 30_000): Promise<RunResult> {
     this.logger?.trace('adb', { args: args.join(' ') });
     try {
-      return await run(this.adbPath, args, { timeoutMs });
+      return await run(this.path, args, { timeoutMs });
     } catch (e) {
-      // "spawn adb ENOENT" is what Node says; an operator deserves what it means.
       const message = e instanceof Error ? e.message : String(e);
-      if (/ENOENT/.test(message)) {
-        throw new DeviceError('adb was not found on this machine.', {
-          hint:
-            'Install Android platform-tools (macOS: brew install android-platform-tools; ' +
-            'Windows: download platform-tools from developer.android.com and add it to PATH), ' +
-            'or point GDPS_ADB_PATH at the adb binary, then press Refresh.',
-        });
+      if (!/ENOENT/.test(message)) throw e;
+
+      try {
+        this.provisioning ??= ensureManagedAdb(this.logger);
+        this.path = await this.provisioning;
+      } catch (provisionError) {
+        // A failed download must not be memoized - Refresh should retry it.
+        this.provisioning = null;
+        const why =
+          provisionError instanceof Error ? provisionError.message : String(provisionError);
+        throw new DeviceError(
+          `adb is not installed, and fetching Android platform-tools automatically failed: ${why}`,
+          {
+            hint:
+              'Check the internet connection and press Refresh to retry the download. Or install ' +
+              'platform-tools yourself (macOS: brew install android-platform-tools; Windows: ' +
+              'download from developer.android.com), or point GDPS_ADB_PATH at an adb binary.',
+          },
+        );
       }
-      throw e;
+      return run(this.path, args, { timeoutMs });
     }
   }
 

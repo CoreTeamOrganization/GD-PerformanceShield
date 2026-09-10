@@ -55227,6 +55227,9 @@ function resolveAdb() {
     const candidate = (0, import_node_path.join)(sdk, "platform-tools", `adb${EXE}`);
     if ((0, import_node_fs.existsSync)(candidate)) return candidate;
   }
+  const known = WINDOWS ? [] : ["/opt/homebrew/bin/adb", "/usr/local/bin/adb", "/opt/local/bin/adb"];
+  const found = known.find((k) => (0, import_node_fs.existsSync)(k));
+  if (found) return found;
   return "adb";
 }
 function resolveAapt2() {
@@ -55781,7 +55784,17 @@ var Adb = class {
   /** Run a raw adb command with no device target (e.g. `devices`, `start-server`). */
   async raw(args, timeoutMs = 3e4) {
     this.logger?.trace("adb", { args: args.join(" ") });
-    return run(this.adbPath, args, { timeoutMs });
+    try {
+      return await run(this.adbPath, args, { timeoutMs });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/ENOENT/.test(message)) {
+        throw new DeviceError("adb was not found on this machine.", {
+          hint: "Install Android platform-tools (macOS: brew install android-platform-tools; Windows: download platform-tools from developer.android.com and add it to PATH), or point GDPS_ADB_PATH at the adb binary, then press Refresh."
+        });
+      }
+      throw e;
+    }
   }
   async startServer() {
     const res = await this.raw(["start-server"], 6e4);

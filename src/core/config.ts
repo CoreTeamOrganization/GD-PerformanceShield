@@ -32,6 +32,18 @@ function androidSdkRoot(): string | null {
   return guesses.find((g) => existsSync(g)) ?? null;
 }
 
+/**
+ * Where the tool keeps its own platform-tools when it had to download them.
+ * Nothing system-wide: no PATH edits, no sudo, removable by deleting the dir.
+ */
+export function managedToolsDir(): string {
+  return env('TOOLS_DIR') ?? join(homedir(), '.gd-performanceshield', 'tools');
+}
+
+export function managedAdbPath(): string {
+  return join(managedToolsDir(), 'platform-tools', `adb${EXE}`);
+}
+
 function resolveAdb(): string {
   const explicit = env('ADB_PATH');
   if (explicit) return explicit;
@@ -54,6 +66,9 @@ function resolveAdb(): string {
     : ['/opt/homebrew/bin/adb', '/usr/local/bin/adb', '/opt/local/bin/adb'];
   const found = known.find((k) => existsSync(k));
   if (found) return found;
+  // A copy the tool downloaded itself on an earlier run (see adbProvision.ts).
+  const managed = managedAdbPath();
+  if (existsSync(managed)) return managed;
   return 'adb'; // rely on PATH
 }
 
