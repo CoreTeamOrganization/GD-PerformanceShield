@@ -60302,6 +60302,39 @@ function buildSummary(project, assets, code, scenes) {
 // src/telemetry/session.ts
 var import_node_events4 = require("node:events");
 
+// src/telemetry/activityEvents.ts
+var AD_ACTIVITIES = [
+  { fragment: "com.google.android.gms.ads", sdk: "AdMob" },
+  { fragment: "com.unity3d.services.ads", sdk: "Unity Ads" },
+  { fragment: "com.unity3d.ads", sdk: "Unity Ads" },
+  { fragment: "com.applovin", sdk: "AppLovin" },
+  { fragment: "com.ironsource", sdk: "ironSource" },
+  { fragment: "com.vungle", sdk: "Vungle" },
+  { fragment: "com.facebook.ads.AudienceNetworkActivity", sdk: "Meta Audience Network" },
+  { fragment: "com.bytedance.sdk", sdk: "Pangle" },
+  { fragment: "com.mbridge.msdk", sdk: "Mintegral" },
+  { fragment: "com.adcolony", sdk: "AdColony" },
+  { fragment: "com.chartboost", sdk: "Chartboost" },
+  { fragment: "com.moloco", sdk: "Moloco" },
+  { fragment: "com.inmobi", sdk: "InMobi" },
+  { fragment: "com.fyber", sdk: "Fyber" },
+  { fragment: "sg.bigo.ads", sdk: "BIGO Ads" },
+  { fragment: "com.my.target", sdk: "myTarget" }
+];
+function classifyActivityStart(message, packageName) {
+  if (!/\bSTART u\d+\b/.test(message)) return null;
+  const cmp = /cmp=([^\s}]+)/.exec(message)?.[1] ?? "";
+  const full = cmp.replace("/", cmp.includes("/.") ? "" : "/");
+  for (const ad of AD_ACTIVITIES) {
+    if (full.includes(ad.fragment) || message.includes(ad.fragment)) {
+      return { kind: "ad", sdk: ad.sdk };
+    }
+  }
+  if (message.includes("android.intent.category.HOME")) return { kind: "home" };
+  if (packageName && cmp.startsWith(`${packageName}/`)) return { kind: "game" };
+  return null;
+}
+
 // src/core/jsonl.ts
 var import_node_fs16 = require("node:fs");
 var import_node_path13 = require("node:path");
@@ -62425,7 +62458,12 @@ var MATCHERS = [
   { re: /FATAL EXCEPTION|Fatal signal \d+|libc\s*:\s*Fatal|tombstone/i, category: "crash" },
   { re: /ANR in |Input dispatching timed out/i, category: "anr" },
   { re: /\bGC_|Explicit concurrent .*GC|Background .*GC .*freed/i, category: "gc" },
-  { re: /^Unity\b|UnityEngine|Unity\s*:/i, category: "unity" }
+  { re: /^Unity\b|UnityEngine|Unity\s*:/i, category: "unity" },
+  // Activity starts, for the context lines on the charts: ads are separate
+  // activities with recognizable SDK classes, and home/return are the same
+  // announcement. Emitted by system_server, so it must count as a system
+  // signal below or a pid filter would drop every one of them.
+  { re: /Activity(Task)?Manager: START u\d/, category: "activity" }
 ];
 var LogcatMonitor = class extends import_node_events2.EventEmitter {
   constructor(opts) {
@@ -62477,7 +62515,7 @@ var LogcatMonitor = class extends import_node_events2.EventEmitter {
       const belongsToApp = this.opts.pids.includes(parsed.pid);
       const mentionsApp = this.opts.pids.some((p) => line.includes(String(p)));
       appRelated = appRelated || belongsToApp || mentionsApp;
-      const isSystemSignal = category === "oom_kill" || category === "low_memory" || category === "anr";
+      const isSystemSignal = category === "oom_kill" || category === "low_memory" || category === "anr" || category === "activity";
       if (!appRelated && !isSystemSignal) return;
     }
     this.keptCount++;
@@ -63328,6 +63366,10 @@ var CaptureSession = class extends import_node_events4.EventEmitter {
     );
     runtime.logcat.on("log", (event) => {
       runtime.logWriter.write(event);
+      if (event.category === "activity") {
+        this.noteActivity(runtime, event);
+        return;
+      }
       const reading = runtime.engine.ingest(event.message);
       if (reading) return;
       if (runtime.engineProfile.ingest(event.message)) return;
@@ -63372,6 +63414,54 @@ var CaptureSession = class extends import_node_events4.EventEmitter {
    * Record a timeline marker. Called by the operator UI (Step 7) and by the
    * system for lifecycle events.
    */
+  /** serial -> why the game is not in front right now, for the return label. */
+  awayBySerial = /* @__PURE__ */ new Map();
+  /** serial -> elapsedMs of the last context mark, to collapse start bursts. */
+  lastActivityMarkAt = /* @__PURE__ */ new Map();
+  /**
+   * Turn an activity-start log line into a context mark on the timeline.
+   *
+   * Stateful where the classifier is not: a game-activity start is only worth a
+   * mark when something else was in front, and its label depends on what that
+   * was. Bursts are collapsed - one ad shows as one mark, not as the three
+   * activity starts its SDK actually performs.
+   */
+  noteActivity(runtime, event) {
+    const signal = classifyActivityStart(event.message, this.opts.packageName);
+    if (!signal) return;
+    const serial = runtime.target.device.serial;
+    const away = this.awayBySerial.get(serial) ?? null;
+    const lastAt = this.lastActivityMarkAt.get(serial) ?? -Infinity;
+    const elapsed = event.elapsedMs;
+    if (elapsed - lastAt < 1500) return;
+    if (signal.kind === "ad") {
+      this.awayBySerial.set(serial, "ad");
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark("ad_opened", {
+        source: "system",
+        serial,
+        label: `Ad opened (${signal.sdk})`,
+        data: { sdk: signal.sdk }
+      });
+      return;
+    }
+    if (signal.kind === "home") {
+      if (away === "home") return;
+      this.awayBySerial.set(serial, "home");
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark("app_left", { source: "system", serial, label: "Left the game (home)" });
+      return;
+    }
+    if (away !== null) {
+      this.awayBySerial.set(serial, null);
+      this.lastActivityMarkAt.set(serial, elapsed);
+      this.mark("app_returned", {
+        source: "system",
+        serial,
+        label: away === "ad" ? "Back from the ad" : "Back in the game"
+      });
+    }
+  }
   mark(type, opts = {}) {
     const t = Date.now();
     const event = {
@@ -67140,7 +67230,10 @@ function isNotableSystemEvent(type) {
     "process_gone",
     "process_restarted",
     "process_killed",
-    "process_crash"
+    "process_crash",
+    "ad_opened",
+    "app_left",
+    "app_returned"
   ].includes(type);
 }
 
@@ -67688,7 +67781,26 @@ function renderFpsChartSvg(opts) {
       `<line x1="${px.toFixed(1)}" y1="${pad.top + plotH}" x2="${px.toFixed(1)}" y2="${(pad.top + plotH - 7).toFixed(1)}" stroke="${bad}" stroke-width="2"/>`
     );
   }
+  let contextRow = 0;
   for (const event of opts.events ?? []) {
+    if (event.kind !== "context" || event.elapsedMs > maxT) continue;
+    const cx = Math.min(width - pad.right, Math.max(pad.left, x(event.elapsedMs)));
+    out.push(
+      `<line x1="${cx.toFixed(1)}" y1="${pad.top}" x2="${cx.toFixed(1)}" y2="${pad.top + plotH}" stroke="${muted}" stroke-width="1" stroke-dasharray="2 4"/>`
+    );
+    if (event.label) {
+      const short = event.label.length > 22 ? `${event.label.slice(0, 21)}\u2026` : event.label;
+      const ty = pad.top + 8 + contextRow % 2 * 10;
+      contextRow++;
+      const anchor = cx > width - pad.right - 90 ? "end" : "start";
+      const tx = anchor === "end" ? cx - 3 : cx + 3;
+      out.push(
+        `<text x="${tx.toFixed(1)}" y="${ty}" fill="${muted}" font-size="8.5" text-anchor="${anchor}">${esc(short)}</text>`
+      );
+    }
+  }
+  for (const event of opts.events ?? []) {
+    if (event.kind === "context") continue;
     if (!event.letter || event.elapsedMs > maxT) continue;
     const cx = Math.min(width - pad.right - 9, Math.max(pad.left + 9, x(event.elapsedMs)));
     const nearest = points.reduce(
@@ -69713,11 +69825,21 @@ function renderFpsChart(w, report) {
       displayHz: d.fps?.displayHz ?? null,
       // The same letters the detail section and the event table use, badged on
       // the curve, so "look at B" resolves in one glance.
-      events: (d.fpsEvents ?? []).map((e) => ({
-        elapsedMs: e.atMs,
-        letter: e.letter,
-        kind: e.kind
-      })),
+      // Lettered findings plus the context lines - ads opening, leaving the
+      // game, returning - that explain what the curve did.
+      events: [
+        ...(d.fpsEvents ?? []).map((e) => ({
+          elapsedMs: e.atMs,
+          letter: e.letter,
+          kind: e.kind
+        })),
+        ...(report.session?.timeline ?? []).filter((t) => ["ad_opened", "app_left", "app_returned"].includes(t.type)).map((t) => ({
+          elapsedMs: t.elapsedMs,
+          letter: "",
+          kind: "context",
+          label: t.label
+        }))
+      ],
       forPrint: false
     });
     if (!svg) continue;
@@ -71907,11 +72029,21 @@ function renderFpsChart2(report) {
       displayHz: d.fps?.displayHz ?? null,
       // The same letters the detail section and the event table use, badged
       // on the curve, so "look at B" resolves in one glance.
-      events: (d.fpsEvents ?? []).map((e) => ({
-        elapsedMs: e.atMs,
-        letter: e.letter,
-        kind: e.kind
-      })),
+      // Lettered findings plus the context lines - ads opening, leaving the
+      // game, returning - that explain what the curve did.
+      events: [
+        ...(d.fpsEvents ?? []).map((e) => ({
+          elapsedMs: e.atMs,
+          letter: e.letter,
+          kind: e.kind
+        })),
+        ...(report.session?.timeline ?? []).filter((t) => ["ad_opened", "app_left", "app_returned"].includes(t.type)).map((t) => ({
+          elapsedMs: t.elapsedMs,
+          letter: "",
+          kind: "context",
+          label: t.label
+        }))
+      ],
       forPrint: true
     });
     if (!svg) return "";
