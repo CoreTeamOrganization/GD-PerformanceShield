@@ -1194,6 +1194,8 @@
       durationMs = 0,
       hoverX = null,
       events = [],
+      /** Ads opening, leaving the game, returning - dashed labeled guide lines. */
+      contextEvents = [],
       selectedEvent = null,
     } = opts;
 
@@ -1336,6 +1338,38 @@
       ctx.textAlign = 'right';
       ctx.globalAlpha = 0.85;
       ctx.fillText(`${displayHz} Hz screen`, width - FPS_PAD.right - 3, yy - 6);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
+    }
+
+    /*
+     * ---- context lines: ads, home, return -----------------------------------
+     *
+     * Drawn under the curve: they are not findings, they are what explains one.
+     * Labels alternate between two rows so an ad and its return seconds later
+     * do not overwrite each other.
+     */
+    let contextRow = 0;
+    for (const event of contextEvents) {
+      if (event.elapsedMs > maxT) continue;
+      const cx = Math.round(x(event.elapsedMs)) + 0.5;
+      ctx.strokeStyle = muted;
+      ctx.globalAlpha = 0.7;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cx, FPS_PAD.top);
+      ctx.lineTo(cx, FPS_PAD.top + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (event.label) {
+        const short = event.label.length > 22 ? `${event.label.slice(0, 21)}…` : event.label;
+        ctx.font = '9px system-ui, sans-serif';
+        ctx.fillStyle = muted;
+        const nearRight = cx > width - FPS_PAD.right - 90;
+        ctx.textAlign = nearRight ? 'right' : 'left';
+        ctx.fillText(short, nearRight ? cx - 3 : cx + 3, FPS_PAD.top + 7 + (contextRow % 2) * 11);
+        contextRow++;
+      }
       ctx.globalAlpha = 1;
       ctx.textAlign = 'left';
     }

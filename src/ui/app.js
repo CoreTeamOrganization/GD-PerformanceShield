@@ -2258,6 +2258,13 @@ function drawChart() {
      */
     const fpsSeries = state.fpsByRole.get(role) ?? [];
     const fpsEvents = OomChart.detectFpsEvents(fpsSeries);
+    // Ads opening, leaving the game, returning - dashed labeled guide lines,
+    // scoped to this device where the event says whose it was.
+    const serial = state.liveByRole.get(role)?.serial ?? null;
+    const contextEvents = state.events
+      .filter((e) => ['ad_opened', 'app_left', 'app_returned'].includes(e.type))
+      .filter((e) => !e.serial || !serial || e.serial === serial)
+      .map((e) => ({ elapsedMs: e.elapsedMs, label: e.label }));
     const hovered = OomChart.drawFps(panel.fpsCanvas, {
       points: fpsSeries,
       // From the live status, which is the only place the refresh rate appears;
@@ -2266,6 +2273,7 @@ function drawChart() {
       durationMs: chartDurationMs(data),
       hoverX: state.fpsHover.get(role) ?? null,
       events: fpsEvents,
+      contextEvents,
       selectedEvent: state.selectedFpsEvent.get(role) ?? null,
     });
 
