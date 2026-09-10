@@ -276,3 +276,61 @@ describe('session-wide frame statistics', () => {
     expect(summary.janks).toBeNull();
   });
 });
+
+/**
+ * FPS stability - the share of session time within ±20% of the median rate.
+ *
+ * The industry definition is a proportion of *time*, not of samples, and over 75
+ * reads as stable with 80 as good. These cases pin the two places that differ:
+ * time weighting when windows report their length, and the band being judged
+ * against the same median the summary itself reports.
+ */
+describe('fps stability', () => {
+  const reading = (fps: number, windowMs?: number) => ({
+    fps,
+    displayHz: 60,
+    matchesDisplayRate: false,
+    frameCount: Math.round(fps * ((windowMs ?? 1000) / 1000)),
+    ...(windowMs !== undefined ? { windowMs } : {}),
+    jankPercent: null,
+    worstFrameMs: null,
+    source: 'timestats',
+  });
+
+  it('reads 100 for a rock-steady session', () => {
+    const summary = summarizeFps(
+      Array.from({ length: 20 }, () => reading(60, 1000)),
+      20_000,
+    );
+    expect(summary.stabilityPercent).toBe(100);
+  });
+
+  it('counts only the time inside ±20% of the median', () => {
+    // 15 seconds at 60 and 5 at 30. Median is 60, band 48-72, so the 30 fps
+    // stretch is outside: 15 of 20 seconds in band.
+    const summary = summarizeFps(
+      [
+        ...Array.from({ length: 15 }, () => reading(60, 1000)),
+        ...Array.from({ length: 5 }, () => reading(30, 1000)),
+      ],
+      20_000,
+    );
+    expect(summary.stabilityPercent).toBe(75);
+  });
+
+  it('weights by window length, not by sample count', () => {
+    // Two samples: 4 s steady at 60 and a 1 s stall at 20. Per-sample it reads
+    // 50%; per-time it is 80% - and the stall must not count like the stretch.
+    const summary = summarizeFps([reading(60, 4000), reading(20, 1000)], 5_000);
+    expect(summary.stabilityPercent).toBe(80);
+  });
+
+  it('falls back to a per-sample share when no window reports a length', () => {
+    const summary = summarizeFps([reading(60), reading(60), reading(20), reading(60)], 4_000);
+    expect(summary.stabilityPercent).toBe(75);
+  });
+
+  it('is null with no samples', () => {
+    expect(summarizeFps([], 0).stabilityPercent).toBeNull();
+  });
+});

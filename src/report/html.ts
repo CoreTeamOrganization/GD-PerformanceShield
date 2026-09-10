@@ -1493,6 +1493,17 @@ function renderFrameRate(report: AnalysisReport, audience: ReportAudience): stri
     fps.averageFps != null
       ? statCell('Average', `${fps.averageFps}<span class="unit">fps</span>`, 'frames over measured time')
       : '',
+    fps.stabilityPercent != null
+      ? statCell(
+          'Stability',
+          `${fps.stabilityPercent}<span class="unit">%</span>`,
+          fps.stabilityPercent >= 80
+            ? 'within ±20% of median · good'
+            : fps.stabilityPercent >= 75
+              ? 'within ±20% of median · stable'
+              : 'within ±20% of median · inconsistent',
+        )
+      : '',
     fps.janks != null
       ? statCell(
           'Stutter',

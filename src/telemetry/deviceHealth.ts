@@ -606,6 +606,14 @@ export interface FpsSummary {
    */
   matchesDisplayRate: boolean | null;
   minFps: number | null;
+  /**
+   * Share of the session spent within ±20% of the median rate, 0-100.
+   *
+   * The industry figure ("FPS stability"): over 75 reads as stable around the
+   * median, 80 as good. Time-weighted where windows report their length, for the
+   * same reason the average is - a 0.4 s stall must not count like a 2 s stretch.
+   */
+  stabilityPercent: number | null;
   /** 1st percentile of sampled rates - the stutter a player actually notices. */
   lowPercentileFps: number | null;
   /** The whole ladder, for reading against a cap rather than against 60. */
@@ -664,6 +672,7 @@ export function summarizeFps(
       displayHz: null,
       matchesDisplayRate: null,
       minFps: null,
+      stabilityPercent: null,
       lowPercentileFps: null,
       percentiles: null,
       sampleCount: 0,
@@ -781,6 +790,31 @@ export function summarizeFps(
   const medianFps =
     sampled.length > 0 ? Math.round(sampled[Math.floor(sampled.length / 2)]! * 10) / 10 : null;
 
+  /*
+   * FPS stability: the share of session time within ±20% of the median rate.
+   *
+   * This is the standard definition (proportion of *time*, not of samples), so
+   * windows are weighted by their length where they report one - the same
+   * reasoning as the average above. Falls back to a per-sample share when no
+   * window carries a length, where every window has to be assumed equal anyway.
+   * The band is judged against the same median the summary reports, so the two
+   * figures cannot disagree about what "the middle" was.
+   */
+  let stabilityPercent: number | null = null;
+  if (medianFps !== null && medianFps > 0) {
+    const lo = medianFps * 0.8;
+    const hi = medianFps * 1.2;
+    let inBand = 0;
+    let weighed = 0;
+    for (const r of readings) {
+      const weight = r.windowMs != null && r.windowMs > 0 ? r.windowMs : measuredMs > 0 ? 0 : 1;
+      if (weight <= 0) continue;
+      weighed += weight;
+      if (r.fps >= lo && r.fps <= hi) inBand += weight;
+    }
+    if (weighed > 0) stabilityPercent = Math.round((inBand / weighed) * 1000) / 10;
+  }
+
   return {
     averageFps: totalFrames > 0 ? Math.round(averageFps * 10) / 10 : null,
     medianFps,
@@ -801,6 +835,7 @@ export function summarizeFps(
     displayHz: hz,
     matchesDisplayRate: judged > 0 ? matching / judged > 0.75 : null,
     minFps: sorted[0] ?? null,
+    stabilityPercent,
     // The same figure as `percentiles.p01`, kept under its older name. It used
     // to be computed separately with a different index, so the two disagreed.
     lowPercentileFps: sorted.length > 0 ? at(0.01) : null,

@@ -695,6 +695,12 @@ function renderFrameRate(w: Write, report: AnalysisReport): void {
   w('|---|---|---|');
   if (f.medianFps != null) w(`| Median | **${f.medianFps} fps** | the typical second |`);
   if (f.averageFps != null) w(`| Average | **${f.averageFps} fps** | frames over measured time |`);
+  if (f.stabilityPercent != null) {
+    w(
+      `| Stability | **${f.stabilityPercent}%** | time within ±20% of the median · ` +
+        `${f.stabilityPercent >= 80 ? 'good' : f.stabilityPercent >= 75 ? 'stable' : 'inconsistent - the rate wanders'} |`,
+    );
+  }
   if (f.janks != null) {
     w(
       `| Stutter | **${f.janks}** jank(s) | ${RATING_LABEL[jankRating]}` +
@@ -1268,6 +1274,7 @@ function renderSummary(w: Write, report: AnalysisReport, audience: ReportAudienc
       // the average says what the stalls cost overall.
       w(
         `| **Frame rate** | **${f.medianFps} fps** median · **${f.averageFps} fps** average` +
+          (f.stabilityPercent != null ? ` · ${f.stabilityPercent}% stable` : '') +
           (f.displayHz ? ` (screen refreshes at ${f.displayHz} Hz)` : '') +
           ' |',
       );

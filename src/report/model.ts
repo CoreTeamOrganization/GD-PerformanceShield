@@ -373,6 +373,12 @@ export const reportSchema = z.object({
           /** True when the game tracked the panel, so a frame cap is not applying. */
           matchesDisplayRate: z.boolean().nullable(),
           minFps: z.number().nullable(),
+          /**
+           * Share of session time within ±20% of the median rate, 0-100.
+           * Over 75 reads as stable around the median; 80 as good.
+           * Optional: reports written before it existed do not carry it.
+           */
+          stabilityPercent: z.number().nullable().optional(),
           lowPercentileFps: z.number().nullable(),
           /**
            * The percentile ladder over the per-second samples, named to match
