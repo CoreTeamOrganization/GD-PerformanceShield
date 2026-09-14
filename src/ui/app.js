@@ -327,6 +327,14 @@ async function onBrowse(button) {
       showError(result.unsupported);
     } else if (result.path) {
       $('projectPath').value = result.path;
+      /*
+       * Setting .value fires no 'input' event, so the probe that runs on every
+       * keystroke never ran for a picked folder. On a real Unity project this
+       * left the hint at its default text and Analyze saying "not a Unity
+       * project" about a folder that was one. The picked path goes through the
+       * same check a typed one does.
+       */
+      if (target === 'project') onProjectPathInput();
       autofillGameName();
     }
   } catch (err) {
