@@ -146,11 +146,11 @@
             </div>
 
             <!--
-              The Unity project folder, hidden for now.
+              The Unity project folder.
               Both this row and the code-options block below are revealed by the
               single `projectAnalysis` flag - in src/core/features.ts for the
-              server, mirrored in app.js for the console. The markup stays so
-              turning it back on is a value change rather than a rewrite.
+              server, mirrored in app.js for the console. The markup ships hidden
+              so the flag, not the HTML, decides; the console un-hides it.
             -->
             <div class="picker-row" id="project-folder-row" hidden>
               <label for="projectPath">Unity project folder <span class="muted">(optional)</span></label>
@@ -172,7 +172,8 @@
               </div>
               <p class="muted small">
                 Assets, import settings, scenes and C# are read from the project and correlated with
-                what the device measured.
+                what the device measured. Only true for the exact source the installed build was made
+                from: a different checkout would name files that are not in the APK.
               </p>
               <p class="mono small" id="code-facts"></p>
             </div>

@@ -592,6 +592,7 @@ select:disabled { opacity: 0.55; }
 
 /* A hint doubles as the validation readout for the field above it. */
 .hint.ok { color: var(--ok); }
+.hint.warn { color: var(--warn); }
 .hint.err { color: var(--bad); }
 .hint.busy { color: var(--muted); font-style: italic; }
 

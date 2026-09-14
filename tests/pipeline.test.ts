@@ -173,6 +173,41 @@ describe('project path as a first-class input', () => {
   }, 30_000);
 });
 
+describe('the project has to be the source of the profiled build', () => {
+  it('correlates when the project and the APK name the same app and version', () => {
+    // The fixture project and the fixture APK are both com.fixture.game 1.4.2,
+    // so the main run above is the matched case: nothing to caveat.
+    expect(pipeline.job.stage('analysis.correlation')?.status).toBe('ok');
+    expect(report.limitations.join(' ')).not.toMatch(/being profiled is|installed build is/);
+  });
+
+  it('skips the correlation and says so when the project builds a different package', async () => {
+    // A leak measured on one game must never be traced to a texture in another
+    // game's checkout - it would read exactly like a real finding. The stage is
+    // skipped rather than run with a caveat, and the report names both ids so
+    // the operator can see which folder they picked.
+    const wrong = new AnalysisPipeline({
+      input: { gameName: 'Wrong Checkout', projectPath: projectRoot, packageName: 'com.other.racer' },
+      staticOnly: true,
+    });
+
+    await wrong.runIntakeAndStatic();
+    const wrongReport = await wrong.finish();
+
+    const stage = wrong.job.stage('analysis.correlation');
+    expect(stage?.status).toBe('skipped');
+    expect(stage?.message).toContain('com.fixture.game');
+    expect(stage?.message).toContain('com.other.racer');
+
+    const limitations = wrongReport.limitations.join(' ');
+    expect(limitations).toContain('com.other.racer');
+    expect(limitations).toMatch(/not in that build/);
+    // Static findings are still predictions about the folder and stay in the report.
+    expect(wrongReport.findings.static.length).toBeGreaterThan(0);
+    expect(wrongReport.findings.correlated).toHaveLength(0);
+  }, 60_000);
+});
+
 describe('report audience cuts', () => {
   it('writes exactly two cuts: a summary and a complete report', () => {
     // The developer cut was dropped: it was the complete report with some of

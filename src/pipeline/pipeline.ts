@@ -41,6 +41,7 @@ import { runStaticAnalysis, type StaticAnalysisResult } from '../static/index.js
 import { CaptureSession, type CaptureTarget } from '../telemetry/session.js';
 import { detectAnomalies, type DeviceAnomalySummary } from '../analysis/anomaly.js';
 import { correlate, type CorrelationLink } from '../analysis/correlation.js';
+import { assessBuildMatch, type BuildMatch } from '../intake/buildMatch.js';
 import { analyzeFlows, type DeviceFlowAnalysis, type ScreenVisit } from '../analysis/flow.js';
 import { score, type ScoringResult } from '../analysis/scoring.js';
 import { loadTimeline, type SessionTimeline } from '../analysis/timeline.js';
@@ -93,6 +94,8 @@ export class AnalysisPipeline extends EventEmitter {
   private project: UnityProjectInfo | null = null;
   private apkFile: AcquiredApk | null = null;
   private apk: ApkInfo | null = null;
+  /** Whether the project describes the profiled build; null when there is no project to ask about. */
+  private buildMatch: BuildMatch | null = null;
   private staticResult: StaticAnalysisResult | null = null;
   private devices: DeviceInfo[] = [];
   /** serial -> Unity profiler forward, when the build is a development build. */
@@ -579,9 +582,40 @@ export class AnalysisPipeline extends EventEmitter {
 
     const staticFindings = this.staticResult?.findings ?? [];
 
+    /*
+     * Is this project the one the build came from? Checked here, not at intake,
+     * because the package being profiled can arrive three ways (APK manifest,
+     * the operator's pick from the installed apps, the capture manifest) and
+     * all three are known by now. Across a different package the correlation
+     * is skipped outright: joining a leak on com.gd.puzzle to a texture in the
+     * com.gd.racer project would read exactly like a real finding.
+     */
+    this.buildMatch = this.project
+      ? assessBuildMatch(
+          {
+            bundleIdentifier: this.project.bundleIdentifier,
+            bundleVersion: this.project.bundleVersion,
+          },
+          {
+            packageName:
+              this.apk?.packageName ??
+              this.opts.input.packageName ??
+              this.session?.manifestData?.packageName ??
+              null,
+            versionName: this.apk?.versionName ?? null,
+          },
+        )
+      : null;
+    if (this.buildMatch) this.job.saveArtifact('static', 'buildMatch.json', this.buildMatch);
+
     let correlations: CorrelationLink[] = [];
     let correlatedFindings: Finding[] = [];
-    await this.job.runStage(
+    if (this.buildMatch && !this.buildMatch.correlationSafe) {
+      this.job.updateStage('analysis.correlation', {
+        status: 'skipped',
+        message: this.buildMatch.message,
+      });
+    } else await this.job.runStage(
       'analysis.correlation',
       async () => {
         const result = correlate({
@@ -814,6 +848,11 @@ export class AnalysisPipeline extends EventEmitter {
         'The Unity project was not available, so no static analysis was performed and runtime findings ' +
           'could not be traced to a cause in the source.',
       );
+    }
+    // A project that is not the build's source is worse than no project: the
+    // reader has to be told before they open a file the finding names.
+    if (this.buildMatch && this.buildMatch.verdict !== 'match') {
+      limitations.push(this.buildMatch.message);
     }
     if (!this.apk) {
       limitations.push('No APK was inspected, so build configuration risks were not assessed.');

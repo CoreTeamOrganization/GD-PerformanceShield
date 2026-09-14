@@ -20,6 +20,8 @@ export interface UnityProjectInfo {
   companyName: string | null;
   productName: string | null;
   bundleIdentifier: string | null;
+  /** PlayerSettings.bundleVersion - the versionName an Android build of this checkout would carry. */
+  bundleVersion: string | null;
   /** Scenes listed in Build Settings, in build order. */
   buildScenes: BuildScene[];
   packages: Record<string, string>;
@@ -40,6 +42,12 @@ export interface UnityProjectProbe {
   unityVersion: string | null;
   scriptingBackend: string | null;
   productName: string | null;
+  /**
+   * What an Android build of this checkout would be called, so the console can
+   * hold it against the app actually being profiled before a run starts.
+   */
+  bundleIdentifier: string | null;
+  bundleVersion: string | null;
   /** Scenes enabled in Build Settings - the ones that actually ship. */
   sceneCount: number;
   usesAddressables: boolean;
@@ -109,6 +117,7 @@ export function validateUnityProject(root: string, logger?: Logger): UnityProjec
     companyName: settings.companyName,
     productName: settings.productName,
     bundleIdentifier: settings.bundleIdentifier,
+    bundleVersion: settings.bundleVersion,
     buildScenes,
     packages,
     usesAddressables,
@@ -137,6 +146,8 @@ export function probeUnityProject(root: string): UnityProjectProbe {
     unityVersion: null,
     scriptingBackend: null,
     productName: null,
+    bundleIdentifier: null,
+    bundleVersion: null,
     sceneCount: 0,
     usesAddressables: false,
     hasPackages: false,
@@ -172,6 +183,8 @@ export function probeUnityProject(root: string): UnityProjectProbe {
     unityVersion: readProjectVersion(root),
     scriptingBackend: settings.scriptingBackend,
     productName: settings.productName,
+    bundleIdentifier: settings.bundleIdentifier,
+    bundleVersion: settings.bundleVersion,
     sceneCount: readBuildScenes(root).filter((scene) => scene.enabled).length,
     // The full validation also looks for group assets on disk; the package
     // dependency is enough to tell the operator Addressables are in play.
@@ -192,6 +205,7 @@ interface ProjectSettingsSummary {
   companyName: string | null;
   productName: string | null;
   bundleIdentifier: string | null;
+  bundleVersion: string | null;
 }
 
 /**
@@ -206,6 +220,7 @@ function readProjectSettings(root: string): ProjectSettingsSummary {
     companyName: null,
     productName: null,
     bundleIdentifier: null,
+    bundleVersion: null,
   };
   if (!existsSync(file)) return empty;
   const text = readFileSync(file, 'utf8');
@@ -223,6 +238,7 @@ function readProjectSettings(root: string): ProjectSettingsSummary {
     companyName: matchScalar(text, 'companyName'),
     productName: matchScalar(text, 'productName'),
     bundleIdentifier: /applicationIdentifier:[\s\S]*?Android:\s*(\S+)/.exec(text)?.[1]?.trim() ?? null,
+    bundleVersion: matchScalar(text, 'bundleVersion'),
   };
 }
 

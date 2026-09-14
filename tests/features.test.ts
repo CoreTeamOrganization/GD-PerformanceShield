@@ -1,16 +1,15 @@
 /**
- * What a hidden feature must not leave behind.
+ * What turning the project folder back on must restore.
  *
- * The Unity project folder is switched off by a single flag rather than deleted,
- * so the risk is not that it stops working - it is that the report keeps
- * *describing* it. A run with no project used to say the project was missing,
- * that causes could not be identified, and that two stages were skipped for
- * want of it: all true, and all about an input the operator was never offered.
- *
- * These pin the two halves that are easy to get wrong: the confidence score
- * must not be docked for an absence that is now by design, and the report must
- * not carry a static-risk figure that can only ever be zero.
+ * The feature was switched off by one flag rather than deleted, and while it
+ * was off the report had to stop *describing* it: no docked confidence for a
+ * project nobody was asked for, no static-risk figure that could only be zero.
+ * Now that it is on, the mirror image has to hold - the report asks for the
+ * project again and says plainly when it was not given - and the console's
+ * copy of the flag has to agree, or the field is hidden while the report
+ * complains about its absence.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { FEATURES } from '../src/core/features.js';
@@ -29,47 +28,52 @@ const CONTEXT = {
 
 const EMPTY = { staticFindings: [], liveFindings: [], correlatedFindings: [] };
 
-describe('the project folder while it is hidden', () => {
-  it('is off, which is what every other case here assumes', () => {
-    // Written as an assertion rather than a comment: if the flag is turned back
-    // on, the expectations below become wrong and should fail loudly rather
+describe('the project folder while it is on', () => {
+  it('is on, which is what every other case here assumes', () => {
+    // Written as an assertion rather than a comment: if the flag is turned off
+    // again, the expectations below become wrong and should fail loudly rather
     // than quietly testing the other branch.
-    expect(FEATURES.projectAnalysis).toBe(false);
+    expect(FEATURES.projectAnalysis).toBe(true);
   });
 
-  it('does not dock confidence for a project nobody was asked for', () => {
+  it('is on in the console too, which has its own copy of the flag', () => {
+    // app.js is plain browser JavaScript and cannot import features.ts, so the
+    // value is duplicated. Flipping one and not the other gives a report that
+    // complains about a missing project next to a console that never offered
+    // the field.
+    const appJs = readFileSync(new URL('../src/ui/app.js', import.meta.url), 'utf8');
+    const mirror = /const FEATURES = \{\s*projectAnalysis:\s*(true|false)/.exec(appJs);
+
+    expect(mirror?.[1]).toBe(String(FEATURES.projectAnalysis));
+  });
+
+  it('docks confidence for a project that was asked for and not given', () => {
     const result = score({ ...EMPTY, context: CONTEXT });
     const names = result.confidence.factors.map((f) => f.name);
 
-    expect(names).not.toContain('Unity project source analyzed');
-    expect(names).not.toContain('Import settings (.meta) available');
+    expect(names).toContain('Unity project source analyzed');
+    expect(names).toContain('Import settings (.meta) available');
+    expect(result.confidence.value).toBeLessThan(0.9);
   });
 
-  it('still reports the confidence factors that have nothing to do with the project', () => {
-    // The guard has to remove two factors, not the list.
-    const result = score({ ...EMPTY, context: CONTEXT });
-    expect(result.confidence.factors.length).toBeGreaterThan(0);
-    expect(result.confidence.value).toBeGreaterThan(0);
-  });
-
-  it('does not explain the absence of the project in its caveats', () => {
+  it('explains the absence of the project in its caveats', () => {
     const result = score({ ...EMPTY, context: CONTEXT });
     const caveats = result.confidence.caveats.join(' ');
 
-    expect(caveats).not.toMatch(/without the project/i);
-    expect(caveats).not.toMatch(/causes cannot be identified/i);
+    expect(caveats).toMatch(/without the project/i);
   });
 
-  it('reaches full confidence on the inputs it does ask for', () => {
-    /*
-     * The point of dropping the factors rather than marking them present: with
-     * the project-side weights gone, a session that captured everything the
-     * console offers should score as complete. Leaving them in as "missing"
-     * capped every possible run at 0.7 and made a good session look partial.
-     */
+  it('reaches full confidence when the project is supplied alongside everything else', () => {
     const result = score({
       ...EMPTY,
-      context: { ...CONTEXT, deviceCount: 2, cycleCount: 3, markerCount: 8 },
+      context: {
+        ...CONTEXT,
+        hasRepository: true,
+        hasMetaFiles: true,
+        deviceCount: 2,
+        cycleCount: 3,
+        markerCount: 8,
+      },
     });
     expect(result.confidence.value).toBeGreaterThan(0.9);
   });

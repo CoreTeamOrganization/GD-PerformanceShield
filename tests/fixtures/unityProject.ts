@@ -75,6 +75,7 @@ export function createFixtureProject(root: string): FixtureProject {
 PlayerSettings:
   companyName: Fixture Studio
   productName: Fixture Game
+  bundleVersion: 1.4.2
   applicationIdentifier:
     Android: com.fixture.game
   scriptingBackend:

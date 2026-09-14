@@ -32,7 +32,7 @@ import { chooseGameName, chooseSubmittedName } from './naming.js';
  * be flipped together.
  */
 const FEATURES = {
-  projectAnalysis: false,
+  projectAnalysis: true,
 };
 
 const state = {
@@ -423,9 +423,15 @@ async function onAnalyze(event) {
     return;
   }
   if (projectPath && !state.project?.valid) {
-    showError(state.project?.reason ?? 'That folder is not a Unity project.');
+    // No probe result yet means the check is still running, not that it failed.
+    showError(
+      state.project
+        ? (state.project.reason ?? 'That folder is not a Unity project.')
+        : 'The project folder is still being checked. Wait for the note under it, then press Analyze again.',
+    );
     return;
   }
+  if (usesProject && !confirmProjectMatchesBuild()) return;
 
   state.mode = mode;
   state.usesDevice = usesDevice;
@@ -2497,6 +2503,10 @@ function selectApp(packageName, opts = {}) {
   state.selectedPackage = packageName;
   $('appSelect').value = packageName;
 
+  // The project hint compares the folder against the chosen app, so choosing a
+  // different app has to re-render it - the folder did not change, the answer did.
+  if (state.project) renderProjectStatus();
+
   // Awaited nowhere: the name lands in the field when it arrives, and the rest
   // of selection must not wait on a device round trip.
   if (packageName) void ensureLabelFor(packageName);
@@ -3695,6 +3705,89 @@ async function probeProject(path) {
   autofillGameName();
 }
 
+/**
+ * Is the folder the code the chosen app was built from?
+ *
+ * The report will say "measured on a real device, and the project contains a
+ * matching cause" and then name a file. Pointed at the wrong checkout it would
+ * say the same thing with the same confidence about a file that is not in the
+ * build - and a reader has no way to notice. So the two facts that *can* be
+ * compared before the run are compared, on every keystroke and every app
+ * change: the Android application identifier in ProjectSettings against the
+ * package, and bundleVersion against the installed versionName. The commit is
+ * not one of them; an APK does not record it.
+ */
+function projectBuildMatch() {
+  const probe = state.project;
+  const buildId = state.selectedPackage || null;
+  const app = state.apps.find((a) => a.packageName === buildId);
+  const projectId = probe?.bundleIdentifier || null;
+  const projectVersion = probe?.bundleVersion || null;
+  const buildVersion = app?.versionName || null;
+
+  if (!buildId) {
+    return {
+      verdict: 'unknown',
+      kind: 'ok',
+      text: 'Unity project confirmed. Choose the app to profile and it is checked against this folder.',
+    };
+  }
+  if (!projectId) {
+    return {
+      verdict: 'unknown',
+      kind: 'warn',
+      text:
+        'Unity project confirmed, but its ProjectSettings state no Android application identifier, so ' +
+        `it could not be checked against ${buildId}. Make sure this is the checkout that build was made from.`,
+    };
+  }
+  if (projectId !== buildId) {
+    return {
+      verdict: 'identifier_differs',
+      kind: 'err',
+      text:
+        `This project builds ${projectId}, but you are profiling ${buildId}. Its code and assets are not ` +
+        'in that build, so nothing measured will be traced to it. Pick the checkout the installed build came from.',
+    };
+  }
+  if (projectVersion && buildVersion && projectVersion !== buildVersion) {
+    return {
+      verdict: 'version_differs',
+      kind: 'warn',
+      text:
+        `Same app, different version: the project is at ${projectVersion} and the installed build is ` +
+        `${buildVersion}. Causes it names may have changed since that build. Check out the build's commit if you can.`,
+    };
+  }
+  return {
+    verdict: 'match',
+    kind: 'ok',
+    text:
+      `Unity project confirmed for ${buildId}${buildVersion ? ' v' + buildVersion : ''}. It must be the exact ` +
+      'code this build was made from - the commit cannot be verified from the device, only the identifier and version.',
+  };
+}
+
+/**
+ * The one dialog in the console, and it is here because the cost of skipping
+ * it is a report that names the wrong file with a straight face. Every run
+ * with a project asks once; the wording carries what the check found.
+ */
+function confirmProjectMatchesBuild() {
+  const match = projectBuildMatch();
+  const lead =
+    match.verdict === 'identifier_differs'
+      ? 'The project does not match the app being profiled.'
+      : match.verdict === 'version_differs'
+        ? 'The project version does not match the installed build.'
+        : 'Same build check';
+  return window.confirm(
+    `${lead}\n\n${match.text}\n\n` +
+      'Code and asset causes in the report are only true for the exact source the installed APK was ' +
+      'built from. Continue with this project?',
+  );
+}
+
 function renderProjectStatus() {
   /*
    * The only place that un-hides `code-options`, so the flag is enforced here
@@ -3706,6 +3799,8 @@ function renderProjectStatus() {
     $('code-options').hidden = true;
     return;
   }
+  // The markup ships hidden so that the flag, not the HTML, decides.
+  $('project-folder-row').hidden = false;
 
   const hint = $('project-hint');
   const probe = state.project;
@@ -3718,7 +3813,8 @@ function renderProjectStatus() {
   } else if (!probe.valid) {
     setHint(hint, probe.reason ?? 'That folder is not a Unity project.', 'err');
   } else {
-    setHint(hint, 'Unity project confirmed.', 'ok');
+    const match = projectBuildMatch();
+    setHint(hint, match.text, match.kind);
   }
 
   // The code options only exist once there is a project to apply them to.

@@ -39,6 +39,16 @@ describe('probeUnityProject', () => {
     expect(probe.sceneCount).toBeGreaterThan(0);
   });
 
+  it('reports what an Android build of the folder would be called', () => {
+    // These two are what the console holds against the app being profiled
+    // before a run starts; without them the same-build check has nothing to
+    // compare and the operator gets a shrug instead of a verdict.
+    const probe = probeUnityProject(projectRoot);
+
+    expect(probe.bundleIdentifier).toBe('com.fixture.game');
+    expect(probe.bundleVersion).toBe('1.4.2');
+  });
+
   it('rejects a folder that is not a Unity project, and says why', () => {
     const probe = probeUnityProject(root);
 
