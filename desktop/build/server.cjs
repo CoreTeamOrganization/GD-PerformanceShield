@@ -35267,11 +35267,11 @@ var require_clean = __commonJS({
   "node_modules/semver/functions/clean.js"(exports2, module2) {
     "use strict";
     var parse2 = require_parse2();
-    var clean = (version, options) => {
+    var clean2 = (version, options) => {
       const s = parse2(version.trim().replace(/^[=v]+/, ""), options);
       return s ? s.version : null;
     };
-    module2.exports = clean;
+    module2.exports = clean2;
   }
 });
 
@@ -36668,7 +36668,7 @@ var require_semver2 = __commonJS({
     var identifiers = require_identifiers();
     var parse2 = require_parse2();
     var valid = require_valid();
-    var clean = require_clean();
+    var clean2 = require_clean();
     var inc = require_inc();
     var diff = require_diff();
     var major = require_major();
@@ -36707,7 +36707,7 @@ var require_semver2 = __commonJS({
     module2.exports = {
       parse: parse2,
       valid,
-      clean,
+      clean: clean2,
       inc,
       diff,
       major,
@@ -55967,9 +55967,9 @@ async function ensureManagedAdb(logger2) {
   try {
     for (const entry of zip.entries()) {
       if (entry.isDirectory) continue;
-      const clean = entry.name.replace(/\\/g, "/");
-      if (clean.includes("..")) continue;
-      const dest = (0, import_node_path5.join)(staging, clean);
+      const clean2 = entry.name.replace(/\\/g, "/");
+      if (clean2.includes("..")) continue;
+      const dest = (0, import_node_path5.join)(staging, clean2);
       (0, import_node_fs6.mkdirSync)((0, import_node_path5.dirname)(dest), { recursive: true });
       (0, import_node_fs6.writeFileSync)(dest, zip.readEntry(entry));
     }
@@ -57490,6 +57490,7 @@ function validateUnityProject(root, logger2) {
     companyName: settings.companyName,
     productName: settings.productName,
     bundleIdentifier: settings.bundleIdentifier,
+    bundleVersion: settings.bundleVersion,
     buildScenes,
     packages,
     usesAddressables,
@@ -57507,6 +57508,8 @@ function probeUnityProject(root) {
     unityVersion: null,
     scriptingBackend: null,
     productName: null,
+    bundleIdentifier: null,
+    bundleVersion: null,
     sceneCount: 0,
     usesAddressables: false,
     hasPackages: false
@@ -57534,6 +57537,8 @@ function probeUnityProject(root) {
     unityVersion: readProjectVersion(root),
     scriptingBackend: settings.scriptingBackend,
     productName: settings.productName,
+    bundleIdentifier: settings.bundleIdentifier,
+    bundleVersion: settings.bundleVersion,
     sceneCount: readBuildScenes(root).filter((scene) => scene.enabled).length,
     // The full validation also looks for group assets on disk; the package
     // dependency is enough to tell the operator Addressables are in play.
@@ -57553,7 +57558,8 @@ function readProjectSettings(root) {
     scriptingBackend: null,
     companyName: null,
     productName: null,
-    bundleIdentifier: null
+    bundleIdentifier: null,
+    bundleVersion: null
   };
   if (!(0, import_node_fs7.existsSync)(file)) return empty;
   const text = (0, import_node_fs7.readFileSync)(file, "utf8");
@@ -57567,7 +57573,8 @@ function readProjectSettings(root) {
     scriptingBackend,
     companyName: matchScalar(text, "companyName"),
     productName: matchScalar(text, "productName"),
-    bundleIdentifier: /applicationIdentifier:[\s\S]*?Android:\s*(\S+)/.exec(text)?.[1]?.trim() ?? null
+    bundleIdentifier: /applicationIdentifier:[\s\S]*?Android:\s*(\S+)/.exec(text)?.[1]?.trim() ?? null,
+    bundleVersion: matchScalar(text, "bundleVersion")
   };
 }
 function matchScalar(text, key) {
@@ -57668,10 +57675,21 @@ var FEATURES = {
   /**
    * Reading the Unity project alongside the device measurement.
    *
-   * Off for now, at the studio's request, pending a decision about whether the
-   * project-side analysis is worth the setup it asks of an operator. Turning it
-   * back on is this one value: it restores the project-folder field in the
-   * console and the project-derived sections of the report.
+   * On since 2026-09-14 to trial the memory side on real GD games: a measured
+   * leak or load spike is traced to the texture, scene or script behind it.
+   * Frame-rate drops are not yet linked to code (they are timeline events, not
+   * findings, so the correlation step never sees them) - that is the next
+   * step, once the memory links have been judged on a few real sessions. It
+   * was off before that, at the studio's request, pending a decision about
+   * whether the project-side analysis is worth the setup it asks of an
+   * operator. Turning it off again is this one value.
+   *
+   * The setup it asks for is one thing and it is strict: the project must be
+   * the code the profiled build came from. The console and the pipeline check
+   * the application identifier and version against the installed app (see
+   * src/intake/buildMatch.ts) and refuse to correlate across a different
+   * package, because a correlation into the wrong project would carry the
+   * same confidence as a right one.
    *
    * What it gates:
    *
@@ -57689,7 +57707,7 @@ var FEATURES = {
    * the CLI takes one, and the analysis behind it is unchanged. This only
    * decides what the console asks for and what the report claims.
    */
-  projectAnalysis: false
+  projectAnalysis: true
 };
 
 // src/pipeline/pipeline.ts
@@ -63516,7 +63534,9 @@ var CaptureSession = class extends import_node_events4.EventEmitter {
           fpsSource: r.sampler.frameRateSource,
           fpsInterference: r.sampler.frameRateInterference,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,
-          temperatureC: r.healthSamples.at(-1)?.thermal?.maxZoneC ?? r.healthSamples.at(-1)?.battery?.temperatureC ?? null,
+          phoneTemperatureC: r.healthSamples.at(-1)?.battery?.temperatureC ?? null,
+          cpuTemperatureC: r.healthSamples.at(-1)?.thermal?.maxZoneC ?? null,
+          cpuZoneName: r.healthSamples.at(-1)?.thermal?.maxZoneName ?? null,
           throttling: r.healthSamples.at(-1)?.thermal?.throttling ?? false,
           batteryPercent: r.healthSamples.at(-1)?.battery?.levelPercent ?? null,
           batteryCharging: r.healthSamples.at(-1)?.battery?.charging ?? false
@@ -64464,6 +64484,44 @@ function tokenize(value) {
 }
 function formatBytes(bytes) {
   return bytes >= 1024 * MB ? `${(bytes / (1024 * MB)).toFixed(2)} GB` : `${(bytes / MB).toFixed(1)} MB`;
+}
+
+// src/intake/buildMatch.ts
+function assessBuildMatch(project, build) {
+  const projectId = clean(project.bundleIdentifier);
+  const buildId = clean(build.packageName);
+  if (!projectId || !buildId) {
+    return {
+      verdict: "unknown",
+      message: "Whether the project matches the profiled build could not be checked: " + (projectId ? "the package being profiled is not known." : "ProjectSettings.asset states no Android application identifier."),
+      correlationSafe: true
+    };
+  }
+  if (projectId !== buildId) {
+    return {
+      verdict: "identifier_differs",
+      message: `The project builds ${projectId}, but the app being profiled is ${buildId}. Its code and assets are not in that build, so no measured problem was traced to it.`,
+      correlationSafe: false
+    };
+  }
+  const projectVersion = clean(project.bundleVersion);
+  const buildVersion = clean(build.versionName);
+  if (projectVersion && buildVersion && projectVersion !== buildVersion) {
+    return {
+      verdict: "version_differs",
+      message: `The project is at version ${projectVersion} but the installed build is ${buildVersion}. Causes named in the project may have changed since that build was made.`,
+      correlationSafe: true
+    };
+  }
+  return {
+    verdict: "match",
+    message: `The project's application identifier matches ${buildId}` + (projectVersion && buildVersion ? ` at version ${buildVersion}` : "") + ". The commit itself cannot be verified from an APK.",
+    correlationSafe: true
+  };
+}
+function clean(value) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 // src/analysis/flow.ts
@@ -69512,10 +69570,13 @@ function renderRuntimeHealth(w, report, audience) {
     if (d.thermal) {
       const t = d.thermal;
       w(
-        `| **Device heat** | ${THERMAL_LABEL[t.verdict]}` + (t.peakC !== null ? ` \u2014 peaked at ${t.peakC} \xB0C` : "") + (t.riseC !== null ? `, up ${t.riseC} \xB0C from the start` : "") + " |"
+        // peakC is the hottest kernel zone - a CPU/GPU die sensor, 20-30 °C above
+        // the battery under load. Labelled "device heat" it was read as the
+        // phone's temperature and disbelieved; the battery row below is that.
+        `| **Hottest sensor (CPU/GPU die)** | ${THERMAL_LABEL[t.verdict]}` + (t.peakC !== null ? ` \u2014 peaked at ${t.peakC} \xB0C` : "") + (t.riseC !== null ? `, up ${t.riseC} \xB0C from the start` : "") + " |"
       );
       if (t.startC !== null && t.endC !== null) {
-        w(`| Temperature, start \u2192 end | ${t.startC} \xB0C \u2192 ${t.endC} \xB0C |`);
+        w(`| Hottest sensor, start \u2192 end | ${t.startC} \xB0C \u2192 ${t.endC} \xB0C |`);
       }
       if (audience !== "lead" && t.throttlingMs > 0) {
         w(`| Time spent throttling | ${formatDuration(t.throttlingMs)} |`);
@@ -70478,6 +70539,8 @@ var AnalysisPipeline = class extends import_node_events5.EventEmitter {
   project = null;
   apkFile = null;
   apk = null;
+  /** Whether the project describes the profiled build; null when there is no project to ask about. */
+  buildMatch = null;
   staticResult = null;
   devices = [];
   /** serial -> Unity profiler forward, when the build is a development build. */
@@ -70865,9 +70928,25 @@ var AnalysisPipeline = class extends import_node_events5.EventEmitter {
       });
     }
     const staticFindings = this.staticResult?.findings ?? [];
+    this.buildMatch = this.project ? assessBuildMatch(
+      {
+        bundleIdentifier: this.project.bundleIdentifier,
+        bundleVersion: this.project.bundleVersion
+      },
+      {
+        packageName: this.apk?.packageName ?? this.opts.input.packageName ?? this.session?.manifestData?.packageName ?? null,
+        versionName: this.apk?.versionName ?? null
+      }
+    ) : null;
+    if (this.buildMatch) this.job.saveArtifact("static", "buildMatch.json", this.buildMatch);
     let correlations = [];
     let correlatedFindings = [];
-    await this.job.runStage(
+    if (this.buildMatch && !this.buildMatch.correlationSafe) {
+      this.job.updateStage("analysis.correlation", {
+        status: "skipped",
+        message: this.buildMatch.message
+      });
+    } else await this.job.runStage(
       "analysis.correlation",
       async () => {
         const result = correlate({
@@ -71047,6 +71126,9 @@ var AnalysisPipeline = class extends import_node_events5.EventEmitter {
       limitations.push(
         "The Unity project was not available, so no static analysis was performed and runtime findings could not be traced to a cause in the source."
       );
+    }
+    if (this.buildMatch && this.buildMatch.verdict !== "match") {
+      limitations.push(this.buildMatch.message);
     }
     if (!this.apk) {
       limitations.push("No APK was inspected, so build configuration risks were not assessed.");
@@ -71611,7 +71693,7 @@ function renderSummary2(report, audience) {
   const strip = [
     session ? statCell("Played for", formatDuration(session.durationMs), `${session.markerCount} point(s) marked`) : "",
     thermal?.peakC != null ? statCell(
-      "Device heat",
+      "CPU heat",
       `${thermal.peakC}<span class="unit">\xB0C peak</span>`,
       `${THERMAL_WORD2[thermal.verdict] ?? ""}${thermal.riseC != null ? ` \xB7 rose ${thermal.riseC} \xB0C` : ""}`
     ) : ""
@@ -72531,7 +72613,7 @@ function renderRuntimeHealth2(report, audience) {
       const t = d.thermal;
       cards.push(
         statCard(
-          "Device heat",
+          "CPU heat",
           t.peakC !== null ? `${t.peakC}<span class="unit">\xB0C</span>` : "\u2014",
           `${THERMAL_LABEL2[t.verdict] ?? ""}` + (t.riseC !== null ? ` \xB7 rose ${t.riseC} \xB0C during play` : ""),
           t.verdict === "throttling" || t.verdict === "hot" ? "bad" : t.verdict === "warm" ? "warn" : "ok"
@@ -72552,7 +72634,7 @@ function renderRuntimeHealth2(report, audience) {
     const spans = [];
     if (d.thermal?.startC != null && d.thermal.endC != null) {
       spans.push(
-        `<tr><td>Temperature</td><td class="num">${d.thermal.startC} \xB0C</td><td class="num">${d.thermal.endC} \xB0C</td><td class="num">${d.thermal.peakC ?? "\u2014"} \xB0C</td></tr>`
+        `<tr><td>Hottest sensor (CPU/GPU die)</td><td class="num">${d.thermal.startC} \xB0C</td><td class="num">${d.thermal.endC} \xB0C</td><td class="num">${d.thermal.peakC ?? "\u2014"} \xB0C</td></tr>`
       );
     }
     if (d.battery?.startPercent != null && d.battery.endPercent != null) {

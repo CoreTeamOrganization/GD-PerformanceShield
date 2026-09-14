@@ -12,7 +12,7 @@ recovery delta) rather than on raw metrics, which now match GameBench 1:1.
 ## Dev loop
 
 ```bash
-npm test                  # vitest; all green is the bar (489 tests as of 2026-09-10)
+npm test                  # vitest; all green is the bar (498 tests as of 2026-09-14)
 npx tsc --noEmit          # typecheck (tsc builds nothing the app runs)
 npm run desktop           # run the Electron app from source
 npm run gui               # same console in a browser
@@ -58,6 +58,18 @@ when server-side code changes.
   `crossToolJanks` (2x median interval) is the GameBench-comparable estimate.
 - Ad/home/return context lines come from ActivityTaskManager START lines
   (src/telemetry/activityEvents.ts); banners/overlay ads are invisible to it.
+- **Two temperatures, never one.** The hottest kernel zone is a CPU/GPU die
+  sensor and runs 20-30 °C above the battery under a game (Galaxy A36: die 65,
+  battery 33, skin 38). Shown as "Temp" it read as the phone's temperature,
+  went red, and was disbelieved. Live console and reports now label it CPU
+  heat; phone heat is the battery sensor, which is also GameBench's figure.
+- **The project must be the build's source.** Correlation names files with the
+  same confidence whether or not they are in the APK. `assessBuildMatch`
+  (src/intake/buildMatch.ts) compares the Android application identifier and
+  bundleVersion against the profiled app: a different package skips the
+  correlation stage, a different version is a report limitation, the commit is
+  unverifiable. The console asks the operator to confirm before every run
+  with a project.
 
 ## State and open threads (as of 2026-09-14)
 
@@ -70,10 +82,16 @@ Open, in rough priority:
 1. Dogfood on real GD games/devices; reconcile vs GameBench **run sequentially**.
 2. Multi-device hardening pass (Samsung/older Android/60 Hz budget devices) —
    the FPS-source fallback chain is where field surprises live.
-3. `projectAnalysis` feature flag (src/core/features.ts) is OFF: the built+tested
-   static-analysis/correlation layer that names the code behind a measured drop.
-   User wants to revisit ("Tier 1/2/3" plan: flip flag -> ProfilerRecorder
-   markers in the Unity reporter -> Perfetto deep capture).
+3. `projectAnalysis` feature flag (src/core/features.ts) is ON as of
+   2026-09-14 to trial the memory side on real games: leaks/spikes are traced
+   to the asset or script behind them (correlation.ts). FPS drops are NOT yet
+   linked to code - they are timeline events, not findings, so correlate()
+   never sees them. Next steps in order: Tier 1 = turn drops into findings
+   tagged with screen + bottleneck verdict and teach correlate() which static
+   rules explain CPU- vs GPU-bound drops (tool-side only); Tier 2 = add GC
+   Allocated In Frame and per-subsystem ProfilerRecorder markers to
+   scripts/unity/PerformanceShieldReporter.cs; Tier 3 = opt-in simpleperf/
+   Perfetto deep capture on a drop (needs the build's IL2CPP symbol file).
 4. Low-severity review leftovers for the developer: compareSessions merges
    screen visits across device roles; zero-length first flow cycle when the
    first marker is flow_complete; deviceTier panel-rate Math.min doc mismatch.
