@@ -159,8 +159,20 @@ export interface LiveStatus {
     fpsInterference: boolean;
     /** When it cannot be measured, what was tried and what came back. */
     fpsDiagnostics: Array<{ strategy: string; ok: boolean; detail: string }>;
-    /** Hottest zone right now, and whether the framework is throttling. */
-    temperatureC: number | null;
+    /**
+     * Two temperatures, kept apart because they answer different questions.
+     *
+     * The battery sensor is what the phone feels like in the hand and what
+     * GameBench reports. The hottest kernel zone is a CPU or GPU die sensor
+     * that runs 20 to 30 degrees above it under a game: on a Galaxy A36 the
+     * die read 65 °C while the battery read 33 °C and the skin 38 °C. Shown
+     * under one "Temp" label the die figure read as "the phone is 65 °C",
+     * turned red, and was disbelieved - correctly.
+     */
+    phoneTemperatureC: number | null;
+    cpuTemperatureC: number | null;
+    cpuZoneName: string | null;
+    /** Whether the framework itself says it is throttling. */
     throttling: boolean;
     batteryPercent: number | null;
     batteryCharging: boolean;
@@ -573,10 +585,9 @@ export class CaptureSession extends EventEmitter {
           fpsSource: r.sampler.frameRateSource,
           fpsInterference: r.sampler.frameRateInterference,
           fpsDiagnostics: r.sampler.frameRateDiagnostics,
-          temperatureC:
-            r.healthSamples.at(-1)?.thermal?.maxZoneC ??
-            r.healthSamples.at(-1)?.battery?.temperatureC ??
-            null,
+          phoneTemperatureC: r.healthSamples.at(-1)?.battery?.temperatureC ?? null,
+          cpuTemperatureC: r.healthSamples.at(-1)?.thermal?.maxZoneC ?? null,
+          cpuZoneName: r.healthSamples.at(-1)?.thermal?.maxZoneName ?? null,
           throttling: r.healthSamples.at(-1)?.thermal?.throttling ?? false,
           batteryPercent: r.healthSamples.at(-1)?.battery?.levelPercent ?? null,
           batteryCharging: r.healthSamples.at(-1)?.battery?.charging ?? false,

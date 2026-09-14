@@ -179,7 +179,7 @@ function renderSummary(report: AnalysisReport, audience: ReportAudience): string
       : '',
     thermal?.peakC != null
       ? statCell(
-          'Device heat',
+          'CPU heat',
           `${thermal.peakC}<span class="unit">°C peak</span>`,
           `${THERMAL_WORD[thermal.verdict] ?? ''}${thermal.riseC != null ? ` · rose ${thermal.riseC} °C` : ''}`,
         )
@@ -1771,7 +1771,7 @@ function renderRuntimeHealth(report: AnalysisReport, audience: ReportAudience): 
         const t = d.thermal;
         cards.push(
           statCard(
-            'Device heat',
+            'CPU heat',
             t.peakC !== null ? `${t.peakC}<span class="unit">°C</span>` : '—',
             `${THERMAL_LABEL[t.verdict] ?? ''}` +
               (t.riseC !== null ? ` · rose ${t.riseC} °C during play` : ''),
@@ -1800,7 +1800,7 @@ function renderRuntimeHealth(report: AnalysisReport, audience: ReportAudience): 
       const spans: string[] = [];
       if (d.thermal?.startC != null && d.thermal.endC != null) {
         spans.push(
-          `<tr><td>Temperature</td><td class="num">${d.thermal.startC} °C</td>` +
+          `<tr><td>Hottest sensor (CPU/GPU die)</td><td class="num">${d.thermal.startC} °C</td>` +
             `<td class="num">${d.thermal.endC} °C</td>` +
             `<td class="num">${d.thermal.peakC ?? '—'} °C</td></tr>`,
         );

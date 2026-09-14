@@ -1187,7 +1187,8 @@ function renderDeviceCards(status) {
         </div>
         <div class="live-stats">
           ${liveStat('FPS', d.fps != null ? d.fps.toFixed(0) : '\u2014', fpsTone(d.fps))}
-          ${liveStat('Temp', d.temperatureC != null ? d.temperatureC.toFixed(0) + '\u00b0' : '\u2014', d.throttling ? 'bad' : heatTone(d.temperatureC))}
+          ${liveStat('Phone', d.phoneTemperatureC != null ? d.phoneTemperatureC.toFixed(0) + '\u00b0' : '\u2014', heatTone(d.phoneTemperatureC))}
+          ${liveStat('CPU', d.cpuTemperatureC != null ? d.cpuTemperatureC.toFixed(0) + '\u00b0' : '\u2014', d.throttling ? 'bad' : cpuHeatTone(d.cpuTemperatureC))}
           ${liveStat('Janks', String(d.janks ?? 0), jankTone(d.janks))}
           ${liveStat('Batt', d.batteryPercent != null ? d.batteryPercent + '%' : '\u2014', d.batteryCharging ? 'charging' : '')}
         </div>
@@ -1292,10 +1293,24 @@ function jankTone(janks) {
  * no baseline yet to measure a rise against. Most phones start limiting
  * performance around 45 degrees.
  */
+/** Phone heat, from the battery sensor: the thresholds a hand agrees with. */
 function heatTone(celsius) {
   if (celsius == null) return '';
   if (celsius >= 45) return 'bad';
   if (celsius >= 40) return 'warn';
+  return 'ok';
+}
+
+/**
+ * Die heat, from the hottest kernel zone. A different scale: 60 °C on a CPU
+ * core under a 3D game is ordinary, and the phone's thresholds turned every
+ * session red. Throttling itself is the framework's call, applied by the
+ * caller, so this only has to say when the die is running unusually hot.
+ */
+function cpuHeatTone(celsius) {
+  if (celsius == null) return '';
+  if (celsius >= 90) return 'bad';
+  if (celsius >= 80) return 'warn';
   return 'ok';
 }
 
@@ -2316,8 +2331,8 @@ function drawChart() {
         panel.fps.className = `panel-fps ${fpsTone(live.fps)}`;
         panel.fps.innerHTML =
           `${live.fps.toFixed(0)}<span class="unit">fps</span>` +
-          (live.temperatureC != null
-            ? ` <span class="sep">\u00b7</span> ${live.temperatureC.toFixed(0)}<span class="unit">\u00b0C</span>`
+          (live.phoneTemperatureC != null
+            ? ` <span class="sep">\u00b7</span> ${live.phoneTemperatureC.toFixed(0)}<span class="unit">\u00b0C</span>`
             : '') +
           (live.throttling ? ' <span class="thr">throttling</span>' : '');
       } else {
@@ -2919,18 +2934,18 @@ function explainFpsMoment(event, memoryStep, live, context) {
       headline: 'Thermal throttling',
       reason:
         `The device reported it was limiting its own performance` +
-        (live.temperatureC != null ? ` at ${live.temperatureC.toFixed(1)} °C` : '') +
+        (live.cpuTemperatureC != null ? ` with the CPU at ${live.cpuTemperatureC.toFixed(1)} °C` : '') +
         '. Frame rate cannot be judged against the build while this is happening - the hardware ' +
         'is not giving the game the clocks it had at the start.',
     };
   }
 
-  if (live?.temperatureC != null && live.temperatureC >= 45) {
+  if (live?.phoneTemperatureC != null && live.phoneTemperatureC >= 45) {
     return {
       tone: 'watch',
-      headline: 'The device is hot',
+      headline: 'The phone is hot',
       reason:
-        `${live.temperatureC.toFixed(1)} °C, which is hot enough that the phone may be reducing ` +
+        `${live.phoneTemperatureC.toFixed(1)} °C at the battery, which is hot enough that the phone may be reducing ` +
         'clocks without having declared it. Worth re-running from cold to see whether the drop ' +
         'survives.',
     };
@@ -3084,8 +3099,14 @@ function showFpsDetail(role, event) {
   state.fpsMemoryStep.set(role, memoryStep);
 
   const live = state.liveByRole.get(role);
-  if (live?.temperatureC != null) {
-    rows.push(['Device heat', `${live.temperatureC.toFixed(1)} °C${live.throttling ? ' — throttling' : ''}`]);
+  if (live?.phoneTemperatureC != null) {
+    rows.push(['Phone heat', `${live.phoneTemperatureC.toFixed(1)} °C (battery sensor)`]);
+  }
+  if (live?.cpuTemperatureC != null) {
+    rows.push([
+      'CPU heat',
+      `${live.cpuTemperatureC.toFixed(1)} °C${live.cpuZoneName ? ` (${live.cpuZoneName})` : ''}${live.throttling ? ' — throttling' : ''}`,
+    ]);
   }
 
   /*

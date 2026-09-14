@@ -945,7 +945,10 @@ function renderRuntimeHealth(w: Write, report: AnalysisReport, audience: ReportA
     if (d.thermal) {
       const t = d.thermal;
       w(
-        `| **Device heat** | ${THERMAL_LABEL[t.verdict]}` +
+        // peakC is the hottest kernel zone - a CPU/GPU die sensor, 20-30 °C above
+        // the battery under load. Labelled "device heat" it was read as the
+        // phone's temperature and disbelieved; the battery row below is that.
+        `| **Hottest sensor (CPU/GPU die)** | ${THERMAL_LABEL[t.verdict]}` +
           (t.peakC !== null ? ` — peaked at ${t.peakC} °C` : '') +
           (t.riseC !== null ? `, up ${t.riseC} °C from the start` : '') +
           ' |',
@@ -954,7 +957,7 @@ function renderRuntimeHealth(w: Write, report: AnalysisReport, audience: ReportA
       // mid-session and settle back to 40, and the end is the state the next
       // session would begin from.
       if (t.startC !== null && t.endC !== null) {
-        w(`| Temperature, start → end | ${t.startC} °C → ${t.endC} °C |`);
+        w(`| Hottest sensor, start → end | ${t.startC} °C → ${t.endC} °C |`);
       }
       if (audience !== 'lead' && t.throttlingMs > 0) {
         w(`| Time spent throttling | ${formatDuration(t.throttlingMs)} |`);
