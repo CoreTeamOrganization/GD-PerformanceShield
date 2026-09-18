@@ -99,8 +99,10 @@ Open, in rough priority:
    Supabase (Postgres/storage/Realtime) — GD buildings share no LAN and Vercel
    can't host WebSockets.
 6. Play-Store-tap context line ("player left to the store") offered, not built.
-7. Windows build for QA racks (`dist:win` on a Windows machine); code-signing/
-   notarization before wide distribution.
+7. Windows build for QA racks: `.github/workflows/windows-build.yml` builds
+   the installer + zip on a `windows-latest` runner (artifacts on the run
+   page). Still owed: a double-click smoke test on a real QA rack, and
+   code-signing/notarization before wide distribution.
 
 Unrelated sibling tool: `~/Documents/GitHub/Package Memory Reader ` holds the
 GD Play Memory Auditor (Python; Play-Console vitals vs Google's Feb 2027

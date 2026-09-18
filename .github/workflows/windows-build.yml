@@ -1,0 +1,49 @@
+# Windows installer for the QA racks.
+#
+# Building the win targets anywhere but Windows drags in wine: the nsis target
+# has to run the installer it just built to produce the uninstaller, and that
+# stub is 32-bit, so a Linux box needs both wine64 and wine32 plus a WINEARCH
+# =win32 prefix before electron-builder gets past "wine is required". A
+# windows-latest runner skips that whole class of problem, and is the only
+# place the result can be smoke-tested by double-clicking it.
+#
+# The artifacts are unsigned. SmartScreen will warn on every studio machine
+# until there is an Authenticode certificate to feed electron-builder - see
+# docs/SPEC_DEVIATIONS.md section 11.
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.11'
+          cache: npm
+
+      - run: npm ci
+
+      # A packaged build that fails the suite is worse than no build: the
+      # operator cannot tell a broken app from a broken device.
+      - run: npm test
+
+      - run: npm run dist:win
+
+      # dist-desktop/ is gitignored, so the run page is where the installer
+      # actually lives. Artifacts expire; tag a release for anything QA keeps.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GD-PerformanceShield-windows-x64
+          path: |
+            dist-desktop/*.exe
+            dist-desktop/*.zip
+          retention-days: 30
+          if-no-files-found: error

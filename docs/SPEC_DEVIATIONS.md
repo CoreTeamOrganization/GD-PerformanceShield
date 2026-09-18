@@ -265,6 +265,21 @@ This cost real debugging time here, so `npm run desktop` goes through
 variable before spawning Electron. Packaged builds are unaffected — they are
 launched from Explorer or Finder, not from a tooling process.
 
+### Windows
+
+`npm run dist:win` produces both a portable zip and an NSIS installer. On
+Windows it needs nothing extra; anywhere else it needs wine, and **64-bit wine
+alone is not enough**. Two 32-bit steps are in the path: electron-builder edits
+the exe's icon and version strings with `rcedit-ia32.exe`, and the nsis target
+runs the installer it just built to generate the uninstaller, which is a 32-bit
+stub. A Linux box therefore needs `wine64`, `wine32:i386`, and a prefix created
+with `WINEARCH=win32` - a 64-bit prefix fails with "it cannot be used with a
+32-bit wineserver" after the packaging has already succeeded, which reads like a
+packaging error and is not one. That is the recipe
+[`.github/workflows/windows-build.yml`](../.github/workflows/windows-build.yml)
+exists to avoid: it builds on a `windows-latest` runner and uploads both
+artifacts.
+
 ### macOS
 
 The build is configured for macOS (dmg + zip, x64 and arm64) but **must be built
