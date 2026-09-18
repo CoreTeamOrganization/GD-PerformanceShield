@@ -35,7 +35,11 @@ jobs:
       # operator cannot tell a broken app from a broken device.
       - run: npm test
 
-      - run: npm run dist:win
+      # `--publish never` is not optional on a runner: electron-builder sees
+      # CI, decides it might publish to a draft release, and fails the whole
+      # build with "GitHub Personal Access Token is not set" *after* the
+      # installer is already sitting in dist-desktop.
+      - run: npm run dist:win -- --publish never
 
       # dist-desktop/ is gitignored, so the run page is where the installer
       # actually lives. Artifacts expire; tag a release for anything QA keeps.
